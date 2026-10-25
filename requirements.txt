@@ -1,0 +1,12 @@
+vosk
+sounddevice
+pystray
+pillow
+pywin32
+winsdk
+yt-dlp
+pycaw
+comtypes
+psutil
+websockets
+anthropic

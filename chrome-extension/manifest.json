@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Джарвис для ютуба",
+  "version": "1.2",
+  "description": "Голосовой помощник Джарвис управляет плеером ютуба: громкость в плеере, песни — в закреплённой вкладке.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["scripting", "alarms"],
+  "host_permissions": ["*://*.youtube.com/*", "http://127.0.0.1/*"]
+}

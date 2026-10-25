@@ -1,0 +1,28 @@
+# окружение и модель — ставятся install.ps1, в репозиторий не кладём
+venv/
+vosk-model-*/
+*.zip
+
+# машинное: пути, псевдонимы программ, режим действий агента
+config.json
+config.json.bak
+config.before-ai.json
+learned.json
+games.json
+memory.json
+reminders.json
+# ключи к ИИ — секрет (keys.dat зашифрован, gemini.key — старый открытый);
+# адрес панели с токеном — тоже
+keys.dat
+gemini.key
+update.key
+panel.url
+
+# рабочее
+logs/
+__pycache__/
+*.pyc
+updates/
+backup/
+versions/
+agent-home/

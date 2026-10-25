@@ -1,0 +1,77 @@
+{
+  "model_path": "",
+  "mic_device": null,
+  "wake_words": [
+    "джарвис",
+    "жарвис",
+    "джарвес",
+    "джавис",
+    "чарвис",
+    "дарвис",
+    "джарис",
+    "джарвиз",
+    "джарв",
+    "джарвист"
+  ],
+  "wake_similarity": 0.78,
+  "command_timeout": 20,
+  "follow_up": false,
+  "greeting": "Джарвис на связи, сэр",
+  "voice": {
+    "name": "Pavel",
+    "engine": "auto",
+    "rate": 0,
+    "volume": 100,
+    "pitch": 1.0
+  },
+  "match_threshold": 0.7,
+  "app_similarity": 0.8,
+  "window_similarity": 0.8,
+  "games_check_minutes": 10,
+  "log_all_speech": false,
+  "performance": {
+    "low_priority": true,
+    "pause_in_fullscreen": false
+  },
+  "game_mode": {
+    "close": {
+      "Хром": "chrome"
+    },
+    "power_plan": true,
+    "volume": null
+  },
+  "apps": {
+    "Стим": {"run": "steam://open/main", "process": "steamwebhelper,steam", "aliases": ["стим", "steam", "стиму", "стэм"]},
+    "Дискорд": {"run": "discord", "process": "discord", "aliases": ["дискорд", "дискорт"]},
+    "Телеграм": {"run": "telegram", "process": "telegram", "aliases": ["телеграм", "телегу", "телега", "телеграмм"]},
+    "Хром": {"run": "chrome", "aliases": ["хром", "гугл хром", "браузер", "гугл"]},
+    "Блокнот": {"run": "notepad", "aliases": ["блокнот"]},
+    "Калькулятор": {"run": "calc", "aliases": ["калькулятор"]},
+    "Проводник": {"run": "explorer", "process": "explorer", "aliases": ["проводник", "мой компьютер", "папки"]},
+    "Диспетчер задач": {"run": "taskmgr", "aliases": ["диспетчер задач", "диспетчер"]},
+    "Терминал": {"run": "wt", "aliases": ["терминал"]},
+    "Пейнт": {"run": "mspaint", "aliases": ["пейнт"]},
+    "Ножницы": {"run": "snippingtool", "aliases": ["ножницы"]},
+    "Эдж": {"run": "msedge", "aliases": ["эдж"]},
+    "Параметры": {"run": "ms-settings:", "aliases": ["параметры", "настройки"]}
+  },
+  "agent": {
+    "min_words": 2,
+    "thinking_phrase": "Секунду, разбираюсь",
+    "thinking_delay": 1.5
+  },
+  "ai": [
+    {
+      "id": "gemini",
+      "preset": "gemini",
+      "type": "gemini",
+      "name": "Gemini",
+      "enabled": true,
+      "model": "gemini-3.5-flash-lite",
+      "backup_models": ["gemini-flash-lite-latest"],
+      "thinking": "minimal",
+      "search": false,
+      "timeout": 3
+    }
+  ]
+}

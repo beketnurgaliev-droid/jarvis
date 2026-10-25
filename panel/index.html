@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Панель Джарвиса</title>
+<link rel="icon" href="/favicon.png">
+<style>
+:root {
+  --bg: #f4f5f8; --side: #ffffff; --card: #ffffff; --line: #e2e5eb; --line2: #eef0f4;
+  --text: #1a1e26; --muted: #5f6878; --faint: #8b93a1;
+  --accent: #2f6fec; --accent-soft: #e8f0fe; --on-accent: #ffffff;
+  --ok: #1f8f3a; --ok-soft: #e6f4ea; --warn: #b26a00; --warn-soft: #fff4e0;
+  --bad: #c62828; --bad-soft: #fdecec; --input: #ffffff;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115; --side: #14171d; --card: #1a1e26; --line: #2a303b; --line2: #222731;
+    --text: #e7eaf0; --muted: #a0a8b6; --faint: #6f7786;
+    --accent: #5b93ff; --accent-soft: #1d2b47; --on-accent: #0b1220;
+    --ok: #4cc26a; --ok-soft: #16301f; --warn: #e3a33a; --warn-soft: #33270f;
+    --bad: #ff6b6b; --bad-soft: #3a1a1a; --input: #12151b;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  display: flex;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* --- боковая панель --- */
+aside {
+  width: 224px; flex: none; background: var(--side); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 18px 12px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+.logo {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--accent);
+  display: grid; place-items: center; flex: none;
+}
+div.logo::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--side);
+  box-shadow: 0 0 0 4px var(--accent), 0 0 0 7px var(--side); }
+img.logo { width: 40px; height: 40px; object-fit: cover; background: none; box-shadow: 0 0 0 2px var(--accent); }
+.brand b { font-size: 16px; display: block; }
+.brand small { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav button {
+  border: 0; background: none; text-align: left; padding: 9px 12px; border-radius: 8px;
+  cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 10px;
+}
+nav button:hover { background: var(--line2); color: var(--text); }
+nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav .ico { width: 18px; text-align: center; opacity: .9; }
+aside .foot { margin-top: auto; color: var(--faint); font-size: 12px; padding: 0 10px; }
+
+/* --- основная часть --- */
+main { flex: 1; overflow-y: auto; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 28px 32px 60px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 22px; }
+section { display: none; } section.active { display: block; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.card h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.card .hint { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+.tile .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.tile .v { font-size: 15px; font-weight: 600; margin: 6px 0 10px; display: flex; align-items: center; gap: 8px; }
+.row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line2); }
+.row:first-of-type { border-top: 0; }
+.row > label, .row > .lbl { width: 210px; flex: none; color: var(--muted); }
+.row > .ctl { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+[hidden] { display: none !important; }    /* .row и прочие с display: flex иначе не прячутся */
+#upd-notes { margin: 0 0 6px; padding-left: 20px; } #upd-notes li { margin: 3px 0; }
+
+input[type=text], input[type=password], input[type=number], select, textarea {
+  background: var(--input); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+textarea { width: 100%; resize: vertical; min-height: 60px; }
+.grow { flex: 1; }
+input[type=range] { flex: 1; accent-color: var(--accent); }
+.val { width: 48px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.switch { position: relative; width: 40px; height: 22px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 22px; cursor: pointer; transition: .15s; }
+.switch span::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::before { transform: translateX(18px); }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.mute { background: var(--line2); color: var(--muted); }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 0 8px 8px; }
+td { padding: 5px 4px; border-top: 1px solid var(--line2); vertical-align: middle; }
+td input { width: 100%; }
+td.act { width: 1%; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--line2); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.empty { color: var(--muted); padding: 18px 0 6px; text-align: center; }
+
+.log { font-size: 13px; }
+.log .ln { display: flex; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line2); }
+.log .t { color: var(--faint); font-variant-numeric: tabular-nums; flex: none; width: 62px; }
+.log .b { flex: none; width: 74px; }
+.log .m { flex: 1; overflow-wrap: anywhere; }
+.filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.filters button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.filters button.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+
+.say { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; }
+.say div { padding: 4px 0; color: var(--muted); }
+.say b { color: var(--text); font-weight: 600; }
+ol.steps { margin: 0; padding-left: 20px; } ol.steps li { margin: 6px 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.two ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+input:disabled { opacity: .45; cursor: not-allowed; }
+.ver { margin-top: 10px; } .ver ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+code { background: var(--line2); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+a { color: var(--accent); }
+
+.ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ph h2 { flex-wrap: wrap; }
+.ctl-r { display: flex; align-items: center; gap: 6px; flex: none; }
+.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.preset { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.preset:hover { border-color: var(--accent); }
+.preset small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 0 8px; }
+.step { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; flex: none; }
+.card.flash { outline: 2px solid var(--accent); }
+
+#toast { position: fixed; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
+.toast { background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,.25); display: flex; gap: 12px; align-items: center; }
+.toast.err { background: var(--bad); color: #fff; }
+.toast button { background: none; border: 1px solid currentColor; color: inherit; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+#gate { position: fixed; inset: 0; background: var(--bg); display: none; place-items: center; text-align: center; padding: 20px; }
+#gate.show { display: grid; }
+
+@media (max-width: 760px) {
+  body { flex-direction: column; }
+  aside { width: auto; flex-direction: row; align-items: center; padding: 10px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .brand { padding: 0 10px 0 0; } .brand small, aside .foot { display: none; }
+  nav { flex-direction: row; }
+  .wrap { padding: 20px 16px 50px; }
+  .row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .row > label, .row > .lbl { width: auto; }
+  .two { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <img class="logo" src="/logo.png" alt="" onerror="this.outerHTML='<div class=&quot;logo&quot;></div>'">
+    <div><b>Джарвис</b><small><span class="dot" id="sdot"></span><span id="stext">…</span></small></div>
+  </div>
+  <nav id="nav">
+    <button data-s="home" class="active"><span class="ico">⌂</span>Главная</button>
+    <button data-s="ai"><span class="ico">✦</span>ИИ</button>
+    <button data-s="voice"><span class="ico">◉</span>Голос и слух</button>
+    <button data-s="apps"><span class="ico">▣</span>Программы</button>
+    <button data-s="modes"><span class="ico">◧</span>Режимы</button>
+    <button data-s="memory"><span class="ico">✎</span>Память</button>
+    <button data-s="learned"><span class="ico">≈</span>Ослышки</button>
+    <button data-s="log"><span class="ico">☰</span>Журнал</button>
+    <button data-s="share"><span class="ico">⇪</span>Поделиться</button>
+  </nav>
+  <div class="foot"><div id="ver"></div><div id="folder"></div></div>
+</aside>
+
+<main><div class="wrap">
+
+<section id="s-home" class="active">
+  <h1>Главная</h1>
+  <p class="sub">Как дела у Джарвиса прямо сейчас.</p>
+  <div class="grid4" id="tiles"></div>
+  <div class="card">
+    <h2>Запуск</h2>
+    <div class="row"><span class="lbl">Запускать при входе в Windows</span>
+      <div class="ctl"><label class="switch"><input type="checkbox" id="autostart"><span></span></label></div></div>
+    <div class="actions">
+      <button class="btn" id="b-restart">Перезапустить Джарвиса</button>
+      <button class="btn" data-open="folder">Открыть папку</button>
+      <button class="btn" data-open="log">Журнал файлом</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Обновления <span id="upd-pill"></span></h2>
+    <p class="hint" id="upd-text" style="margin:0 0 10px"></p>
+    <ul id="upd-notes" hidden></ul>
+    <div class="row" id="upd-auto-row"><span class="lbl">Обновляться самому</span><div class="ctl"><label class="switch"><input type="checkbox" id="upd-auto"><span></span></label><span class="hint" style="margin:0">ставит новую версию, когда с ним не говорят и нет игры на весь экран</span></div></div>
+    <form class="row" onsubmit="return false"><label for="upd-key">Ключ доступа к обновлениям</label><div class="ctl"><input type="password" id="upd-key" class="grow" autocomplete="off" placeholder="github_pat_…"><button type="button" class="btn" id="upd-key-save">Сохранить</button></div></form>
+    <div class="actions">
+      <button class="btn" id="upd-check">Проверить сейчас</button>
+      <button class="btn primary" id="upd-install" hidden>Обновить сейчас</button>
+      <button class="btn" id="upd-back" hidden>Вернуть прежнюю</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Таймеры и напоминания</h2>
+    <p class="hint">«Джарвис, таймер на 5 минут», «напомни через час позвонить маме», «напомни завтра в 10 сдать отчёт». Сработает голосом, даже после перезапуска.</p>
+    <table><tbody id="rem-list"></tbody></table>
+  </div>
+  <div class="card">
+    <h2>Погода</h2>
+    <form class="row" onsubmit="return false"><label for="city">Город по умолчанию</label><div class="ctl"><input type="text" id="city" placeholder="Алматы" style="width:220px"><button type="button" class="btn" id="city-save">Сохранить</button><span class="hint" style="margin:0">«Джарвис, какая погода» — про этот город; другой — «погода в Астане»</span></div></form>
+  </div>
+  <div class="card">
+    <h2>Что можно сказать</h2>
+    <p class="hint">Сначала «Джарвис», потом команда — можно одной фразой. Каждая команда — снова с именем; без имени он слышит только ответ «да» или «нет» на свой вопрос.</p>
+    <div class="say">
+      <div><b>открой телеграм</b> · запусти доту</div>
+      <div><b>сверни все окна</b> · закрой дискорд</div>
+      <div><b>поставь песню …</b> · следующая песня</div>
+      <div><b>громкость ютуба на двадцать</b></div>
+      <div><b>громкость тридцать</b> · тише · громче</div>
+      <div><b>игровой режим</b> · обычный режим</div>
+      <div><b>разложи код</b> · сделай скриншот</div>
+      <div><b>какая погода</b> · курс доллара</div>
+      <div><b>таймер на 5 минут</b> · напомни через час…</div>
+      <div><b>запомни, что…</b> · что ты обо мне знаешь</div>
+      <div><b>рабочий режим</b> — свои режимы во вкладке «Режимы»</div>
+      <div><b>открой панель</b> · отбой</div>
+      <div><b>какая у тебя версия</b> · проверь обновления · обновись</div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Что нового <span id="ver-pill"></span></h2>
+    <p class="hint">Если что-то сломалось — скажите номер версии: так понятно, после какой правки.</p>
+    <div id="changes"></div>
+  </div>
+</section>
+
+<section id="s-ai">
+  <h1>ИИ</h1>
+  <p class="sub">Когда команда не из списка, Джарвис спрашивает подключённые ИИ по очереди — сверху вниз: кто первый ответил, тот и отвечает. Подключите хотя бы один — подойдёт любой ключ или подписка.</p>
+  <div id="ai-list"></div>
+  <div class="actions" style="margin:0 0 16px"><button class="btn primary" id="ai-add-btn">+ Подключить ИИ</button></div>
+  <div class="card" id="ai-add" hidden>
+    <h2>Что у вас есть?</h2>
+    <p class="hint">Выберите — появится карточка с подсказками, что делать дальше. Подписка (ChatGPT Plus, Claude Pro, Gemini) и ключ API — разные вещи: подписку подключают через программу, ключ — вставляют.</p>
+    <div id="ai-presets"></div>
+  </div>
+  <div class="card">
+    <h2>Общее</h2>
+    <div class="row"><label for="a-delay">Говорить «Секунду, разбираюсь», если ответ дольше</label>
+      <div class="ctl"><input type="range" id="a-delay" min="0" max="5" step="0.5"><span class="val" id="a-delay-v"></span></div></div>
+    <p class="hint" style="margin:8px 0 0">ИИ, который не умеет искать в интернете, вопросы про погоду и новости отдаёт следующему по списку — тому, кто умеет.</p>
+  </div>
+</section>
+
+<section id="s-voice">
+  <h1>Голос и слух</h1>
+  <p class="sub">Как Джарвис говорит и как он вас слышит.</p>
+  <div class="card">
+    <h2>Голос</h2>
+    <div class="row"><label for="v-name">Голос</label><div class="ctl"><select id="v-name" class="grow"><option>загружаю…</option></select></div></div>
+    <div class="row"><label for="v-rate">Скорость</label><div class="ctl"><input type="range" id="v-rate" min="-10" max="10" step="1"><span class="val" id="v-rate-v"></span></div></div>
+    <div class="row"><label for="v-pitch">Высота</label><div class="ctl"><input type="range" id="v-pitch" min="0.5" max="1.5" step="0.05"><span class="val" id="v-pitch-v"></span></div></div>
+    <div class="row"><label for="v-vol">Громкость голоса</label><div class="ctl"><input type="range" id="v-vol" min="0" max="100" step="5"><span class="val" id="v-vol-v"></span></div></div>
+    <div class="row"><label for="v-greet">Приветствие при запуске</label><div class="ctl"><input type="text" id="v-greet" class="grow"></div></div>
+    <div class="actions"><button class="btn" id="v-test">▶ Прослушать</button><button class="btn primary" id="v-save">Сохранить</button></div>
+  </div>
+  <div class="card">
+    <h2>Слух</h2>
+    <div class="row"><label for="h-mic">Микрофон</label><div class="ctl"><select id="h-mic" class="grow"><option>загружаю…</option></select></div></div>
+    <div class="row"><label for="h-words">На какие имена отзывается</label><div class="ctl"><textarea id="h-words" rows="2"></textarea></div></div>
+    <div class="row"><label for="h-sim">Насколько точно услышать имя</label>
+      <div class="ctl"><span class="hint" style="margin:0">мягче</span><input type="range" id="h-sim" min="0.6" max="0.95" step="0.01"><span class="hint" style="margin:0">строже</span><span class="val" id="h-sim-v"></span></div></div>
+    <div class="row"><span class="lbl">Слушать без имени после команды</span><div class="ctl"><label class="switch"><input type="checkbox" id="h-follow"><span></span></label><span class="hint" style="margin:0">выключено — каждая команда только после «Джарвис»</span></div></div>
+    <div class="row"><label for="h-timeout">Сколько слушать без имени, сек</label><div class="ctl"><input type="number" id="h-timeout" min="5" max="120" style="width:90px"></div></div>
+    <p class="hint" style="margin:10px 0 0">Имена — через запятую. Добавляйте и то, как распознавание вас слышит: «джарис», «жарвис». Строже — меньше ложных срабатываний, мягче — реже пропускает.</p>
+    <div class="actions"><button class="btn primary" id="h-save">Сохранить</button></div>
+  </div>
+  <div class="card">
+    <h2>Производительность</h2>
+    <p class="hint" style="margin:0 0 10px">Чтобы Джарвис в фоне не мешал играм и работе — особенно на слабом ПК.</p>
+    <div class="row"><label for="perf-model">Модель распознавания</label><div class="ctl"><select id="perf-model" class="grow"><option>загружаю…</option></select></div></div>
+    <div class="row"><span class="lbl">Не мешать играм и программам</span><div class="ctl"><label class="switch"><input type="checkbox" id="perf-prio"><span></span></label><span class="hint" style="margin:0">пониженный приоритет процесса — Windows отдаёт процессор игре первым</span></div></div>
+    <div class="row"><span class="lbl">Пауза распознавания в полноэкранной игре</span><div class="ctl"><label class="switch"><input type="checkbox" id="perf-pause"><span></span></label><span class="hint" style="margin:0">в игре на весь экран не слушает — процессор свободен</span></div></div>
+    <p class="hint" style="margin:10px 0 0">Маленькая модель грузит процессор в разы меньше — выбор для слабого ПК, но слышит чуть хуже. Смена модели применится после перезапуска. С паузой в игре голос вернётся, когда свернёте игру.</p>
+    <div class="actions"><button class="btn primary" id="perf-save">Сохранить</button></div>
+  </div>
+</section>
+
+<section id="s-apps">
+  <h1>Программы</h1>
+  <p class="sub">Что открывать по имени. Программы из меню «Пуск» Джарвис находит и сам — сюда стоит добавлять то, что он не находит или называет неудобно.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:24%">Как называть</th><th style="width:30%">Что запускать</th><th>Ещё варианты, через запятую</th><th></th></tr></thead>
+      <tbody id="apps"></tbody>
+    </table>
+    <div class="actions"><button class="btn" id="app-add">+ Добавить</button><button class="btn primary" id="apps-save">Сохранить</button></div>
+    <p class="hint" style="margin:12px 0 0">«Что запускать» — имя ярлыка из меню «Пуск», программа (<code>notepad</code>) или ссылка (<code>steam://open/main</code>).</p>
+  </div>
+  <div class="card"><h2>Игры</h2><p class="hint">Нашёл сам в Steam и Epic Games. Обновляются каждые 10 минут.</p><div class="chips" id="games"></div></div>
+</section>
+
+<section id="s-modes">
+  <h1>Режимы</h1>
+  <p class="sub">Одной фразой — несколько действий. «Джарвис, рабочий режим» — открыть нужные программы, закрыть или свернуть лишнее, разложить окна, поставить громкость.</p>
+  <div id="modes-list"></div>
+  <div class="actions" style="margin:0 0 16px">
+    <button class="btn" id="mode-add">+ Новый режим</button>
+    <select id="mode-tpl"><option value="">…или из шаблона</option><option value="work">Рабочий режим</option><option value="evening">Конец дня</option><option value="movie">Кино</option></select>
+    <button class="btn primary" id="modes-save">Сохранить режимы</button>
+    <span class="hint" id="modes-dirty" style="margin:6px 0 0"></span>
+  </div>
+  <datalist id="app-names"></datalist>
+  <div class="card">
+    <h2>Игровой режим</h2>
+    <p class="hint">«Джарвис, игровой режим» — закрывает рабочие программы (сначала спросит), включает максимальную производительность и слушает только команды по имени. «Обычный режим» — всё обратно.</p>
+    <div class="row"><span class="lbl">Закрывать на время игры</span><div class="ctl" style="display:block">
+      <table><tbody id="gm-close"></tbody></table>
+      <div class="actions" style="margin-top:8px"><select id="gm-running"><option value="">+ добавить из открытых сейчас…</option></select><button class="btn small" id="gm-add">+ вручную</button></div>
+    </div></div>
+    <div class="row"><span class="lbl">Максимальная производительность</span><div class="ctl"><label class="switch"><input type="checkbox" id="gm-power"><span></span></label><span class="hint" style="margin:0">схема питания Windows, после игры вернётся прежняя</span></div></div>
+    <div class="row"><label for="gm-volume">Громкость при включении</label><div class="ctl"><input type="number" id="gm-volume" min="0" max="100" style="width:90px" placeholder="как есть"><span class="hint" style="margin:0">пусто — не трогать</span></div></div>
+    <div class="actions"><button class="btn primary" id="gm-save">Сохранить</button></div>
+  </div>
+</section>
+
+<section id="s-memory">
+  <h1>Память</h1>
+  <p class="sub">Что Джарвис знает о вас — ИИ учитывает это в ответах. Голосом: «Джарвис, запомни, что…», «забудь про…», «что ты обо мне знаешь».</p>
+  <div class="card">
+    <div class="row"><span class="lbl">Запоминать самому</span><div class="ctl"><label class="switch"><input type="checkbox" id="mem-auto"><span></span></label><span class="hint" style="margin:0">ИИ сам замечает в разговоре важное о вас — имена, привычки, предпочтения — и записывает сюда</span></div></div>
+    <form class="row" onsubmit="return false"><label for="mem-new">Добавить</label><div class="ctl"><input type="text" id="mem-new" class="grow" placeholder="например: жену зовут Айгерим; работаю 1С-программистом"><button type="button" class="btn primary" id="mem-add">Запомнить</button></div></form>
+  </div>
+  <div class="card"><table><thead><tr><th>Что знает</th><th style="width:90px">Откуда</th><th style="width:100px">Когда</th><th></th></tr></thead><tbody id="mem-list"></tbody></table></div>
+</section>
+
+<section id="s-learned">
+  <h1>Ослышки</h1>
+  <p class="sub">Фразы, которые распознавание слышит криво, а агент однажды понял как команду. Дальше Джарвис узнаёт их сам. Неверную — забудьте.</p>
+  <div class="card"><table><thead><tr><th>Услышал</th><th>Понял как</th><th></th></tr></thead><tbody id="learned"></tbody></table></div>
+</section>
+
+<section id="s-log">
+  <h1>Журнал</h1>
+  <p class="sub">Что Джарвис услышал и ответил. Разговоры без обращения по имени сюда не пишутся.</p>
+  <div class="card">
+    <div class="filters" id="log-f">
+      <button data-f="all" class="on">Всё</button><button data-f="cmd">Команды</button>
+      <button data-f="brain">Ответы ИИ</button><button data-f="error">Ошибки</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</section>
+
+<section id="s-share">
+  <h1>Поделиться</h1>
+  <p class="sub">Архив Джарвиса для друга — без ваших личных данных.</p>
+  <div class="card">
+    <div class="two">
+      <div><h2>Попадёт в архив</h2><ul><li>программа Джарвиса и панель</li><li>расширение для ютуба</li><li>установщик</li></ul></div>
+      <div><h2>Не попадёт</h2><ul><li>ваш ключ Gemini</li><li>ваши настройки и программы</li><li>журнал и ослышки</li><li>Python и модели — установщик скачает сам</li></ul></div>
+    </div>
+    <div class="actions"><button class="btn primary" id="pack">Собрать архив</button><span id="pack-out" class="hint" style="margin:6px 0 0"></span></div>
+  </div>
+  <div class="card">
+    <h2>Что сделать другу</h2>
+    <ol class="steps">
+      <li>Распаковать архив в <code>C:\Jarvis</code> — без русских букв в пути, иначе не загрузится распознавание.</li>
+      <li>Запустить <b>Установить.bat</b>: поставит Python, библиотеки и модель распознавания (большая — 1,8 ГБ, слышит лучше).</li>
+      <li>Получить свой бесплатный ключ на <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> и вставить, когда установщик спросит. Или позже — в панели, во вкладке «ИИ».</li>
+      <li>По желанию — расширение для ютуба: в Chrome <code>chrome://extensions</code> → «Режим разработчика» → «Загрузить распакованное» → папка <code>chrome-extension</code>.</li>
+    </ol>
+  </div>
+</section>
+
+</div></main>
+
+<div id="toast"></div>
+<div id="gate"><div><h1>Панель закрыта</h1><p class="sub" id="gate-text">Откройте её из трея: щелчок по значку Джарвиса.</p></div></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+// токен приходит в адресе после # — запоминаем на время окна и убираем из адреса
+const hashArgs = new URLSearchParams(location.hash.slice(1));
+const fromHash = hashArgs.get("t");
+if (hashArgs.get("tab")) sessionStorage.setItem("tab", hashArgs.get("tab"));
+if (fromHash) { sessionStorage.setItem("t", fromHash); history.replaceState(null, "", "/"); }
+const TOKEN = sessionStorage.getItem("t") || "";
+
+let S = null;          // всё состояние от Джарвиса
+let appsRows = [];     // таблица программ, пока не сохранили
+let logFilter = "all";
+let logTimer = null;
+
+async function api(path, body) {
+  let r;
+  try {
+    r = await fetch(path, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {"X-Jarvis-Token": TOKEN, "Content-Type": "application/json"},
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) {
+    gate("Джарвис не отвечает. Если он перезапускался — откройте панель заново из трея.");
+    throw e;
+  }
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* пусто */ }
+  if (r.status === 403) { gate("Джарвис перезапускался — откройте панель заново: щелчок по значку в трее."); }
+  if (!r.ok) throw new Error(data.error || "ошибка " + r.status);
+  return data;
+}
+
+function gate(text) { $("#gate-text").textContent = text; $("#gate").classList.add("show"); }
+
+function toast(text, opts = {}) {
+  const el = document.createElement("div");
+  el.className = "toast" + (opts.err ? " err" : "");
+  el.innerHTML = "<span>" + esc(text) + "</span>";
+  if (opts.action) {
+    const b = document.createElement("button");
+    b.textContent = opts.action.label;
+    b.onclick = () => { el.remove(); opts.action.run(); };
+    el.appendChild(b);
+  }
+  $("#toast").appendChild(el);
+  setTimeout(() => el.remove(), opts.action ? 9000 : 3500);
+}
+
+async function run(btn, fn) {
+  if (btn) btn.disabled = true;
+  try { return await fn(); }
+  catch (e) { toast(e.message, {err: true}); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+function pill(cls, text) { return `<span class="pill ${cls}">${esc(text)}</span>`; }
+function ruDate(iso) { return (iso || "").split("-").reverse().join("."); }   // 2026-10-21 → 21.10.2026
+
+// --- навигация -------------------------------------------------------------
+$("#nav").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  show(b.dataset.s);
+});
+function show(name) {
+  document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("active", b.dataset.s === name));
+  document.querySelectorAll("section").forEach((s) => s.classList.toggle("active", s.id === "s-" + name));
+  clearInterval(logTimer);
+  if (name === "voice") loadVoiceLists();
+  if (name === "log") { loadLog(); logTimer = setInterval(loadLog, 5000); }
+  if (name === "modes") loadRunning();
+  if (name === "memory" && S) api("/api/state").then((st) => { S.memory = st.memory; renderMemory(); }).catch(() => {});
+  try { sessionStorage.setItem("tab", name); } catch (e) { /* не важно */ }
+}
+
+// --- состояние -------------------------------------------------------------
+const STATES = {idle: "Ждёт обращения", listening: "Слушает команду", working: "Выполняет", paused: "На паузе"};
+
+async function load() {
+  S = await api("/api/state");
+  renderStatus(); renderUpdate(); renderAI(); renderVoice(); renderApps(); renderLearned();
+  if (!modesDirty) renderModes();
+  renderMemory();
+  renderReminders();
+  $("#city").value = S.city || "";
+}
+
+function renderStatus() {
+  const st = S.status, ai = S.ai;
+  const state = st.paused ? "paused" : st.state;
+  $("#sdot").className = "dot " + (st.paused ? "warn" : "ok");
+  $("#stext").textContent = STATES[state] || state;
+  $("#folder").textContent = st.folder;
+  $("#ver").textContent = `Версия ${st.version} · ${ruDate(st.version_date)}`;
+  $("#ver-pill").innerHTML = pill("ok", "версия " + st.version);
+  $("#changes").innerHTML = (S.changes || []).map((c) => `<div class="ver">
+      <b>${esc(c.version)}</b> <span class="hint" style="margin:0">${esc(ruDate(c.date))}</span>
+      <ul>${c.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+  $("#autostart").checked = st.autostart;
+  const on = ai.providers.filter((p) => p.enabled && p.status.ready);
+  $("#tiles").innerHTML = `
+    <div class="tile"><div class="k">Джарвис</div><div class="v"><span class="dot ${st.paused ? "warn" : "ok"}"></span>${esc(STATES[state] || state)}</div>
+      <button class="btn small" id="b-pause">${st.paused ? "Продолжить" : "Пауза"}</button>${st.game_mode ? " " + pill("warn", "игровой режим") : ""}</div>
+    <div class="tile"><div class="k">ИИ</div><div class="v">${on.length ? pill("ok", "подключено: " + on.length) : pill("warn", "не подключён")}</div>
+      <button class="btn small" data-go="ai">${on.length ? esc(on.map((p) => p.name).join(", ")) : "Подключить"}</button></div>
+    <div class="tile"><div class="k">Ютуб в Chrome</div><div class="v">${st.youtube ? pill("ok", "расширение на связи") : pill("mute", "не подключено")}</div>
+      <button class="btn small" data-open="extension">Папка расширения</button></div>`;
+  $("#b-pause").onclick = (e) => run(e.target, async () => { await api("/api/pause", {}); await load(); });
+}
+
+document.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]"); if (go) show(go.dataset.go);
+  const op = e.target.closest("[data-open]");
+  if (op) run(op, () => api("/api/open", {what: op.dataset.open}));
+});
+
+$("#autostart").onchange = (e) => run(null, async () => {
+  const r = await api("/api/autostart", {on: e.target.checked});
+  e.target.checked = r.autostart;
+  toast(r.autostart ? "Будет запускаться при входе в Windows" : "Автозапуск выключен");
+});
+
+$("#b-restart").onclick = (e) => run(e.target, async () => { await restart(); });
+
+// --- обновления ------------------------------------------------------------
+function renderUpdate() {
+  const u = S.update;
+  let cls = "ok", label = "последняя версия", text;
+  if (!u.has_key) {
+    cls = "mute"; label = "выключены";
+    text = "Нет ключа доступа — новые версии не проверяются. Ключ присылает тот, кто дал вам Джарвиса.";
+  } else if (u.installing) {
+    cls = "warn"; label = "ставится";
+    text = "Джарвис обновляется и через минуту запустится сам.";
+  } else if (u.error) {
+    cls = "warn"; label = "не проверилось";
+    text = "Не получилось: " + u.error + (u.checked ? " (" + u.checked + ")" : "");
+  } else if (u.available) {
+    cls = "warn"; label = "есть " + u.available;
+    text = `Вышла версия ${u.available}. ` + (u.auto ? "Поставится сама, когда с Джарвисом не говорят — или нажмите «Обновить сейчас»." : "Нажмите «Обновить сейчас» или скажите «Джарвис, обновись».");
+  } else {
+    text = u.checked ? `Стоит последняя — ${u.current}. Проверено ${u.checked}.` : "Проверит через пару минут после запуска, потом — каждые несколько часов.";
+  }
+  if (u.failed) text += ` Версия ${u.failed} не запустилась — вернулась прежняя; ждём следующую.`;
+  $("#upd-pill").innerHTML = pill(cls, label);
+  $("#upd-text").textContent = text;
+  $("#upd-notes").hidden = !u.notes.length;
+  $("#upd-notes").innerHTML = u.notes.map((x) => `<li>${esc(x)}</li>`).join("");
+  $("#upd-auto-row").hidden = !u.has_key;
+  $("#upd-auto").checked = u.auto;
+  $("#upd-key").value = "";
+  $("#upd-key").placeholder = u.has_key ? "есть: " + u.key_hint + " — вставьте новый, чтобы заменить" : "github_pat_…";
+  $("#upd-check").hidden = !u.has_key;
+  $("#upd-install").hidden = !u.available || u.installing;
+  $("#upd-back").hidden = !u.backup;
+  $("#upd-back").textContent = "Вернуть версию " + u.backup;
+}
+
+$("#upd-check").onclick = (e) => run(e.target, async () => {
+  const r = await api("/api/update/check", {});
+  S.update = r.update; renderUpdate();
+  if (!r.update.error) toast(r.update.available ? "Есть версия " + r.update.available : "Стоит последняя версия");
+});
+$("#upd-auto").onchange = (e) => run(null, async () => {
+  const r = await api("/api/update/settings", {auto: e.target.checked});
+  S.update = r.update; renderUpdate();
+  toast(r.update.auto ? "Будет обновляться сам" : "Сам не обновится — только по кнопке или «обновись»");
+});
+$("#upd-key-save").onclick = (e) => run(e.target, async () => {
+  const r = await api("/api/update/settings", {key: $("#upd-key").value});
+  S.update = r.update; renderUpdate();
+  toast(r.update.error ? "Ключ сохранён, но: " + r.update.error : "Ключ сохранён", {err: !!r.update.error});
+});
+$("#upd-install").onclick = (e) => run(e.target, async () => {
+  await api("/api/update/install", {});
+  gate("Джарвис обновляется — через минуту он скажет, что готов. Потом откройте панель снова: щелчок по значку в трее.");
+});
+$("#upd-back").onclick = (e) => run(e.target, async () => {
+  if (!confirm(`Вернуть версию ${S.update.backup}?`)) return;
+  await api("/api/update/rollback", {});
+  gate("Джарвис возвращает прежнюю версию. Через минуту откройте панель снова — щелчок по значку в трее.");
+});
+async function restart() {
+  await api("/api/restart", {});
+  gate("Джарвис перезапускается. Через несколько секунд откройте панель снова — щелчок по значку в трее.");
+}
+
+// --- ИИ --------------------------------------------------------------------
+let aiList = [];                 // подключённые ИИ по порядку
+const modelLists = {};           // загруженные списки моделей: id -> [имена]
+const GROUPS = [["free", "Бесплатный ключ"], ["key", "Платный ключ"], ["sub", "Подписка"], ["own", "Своё"]];
+const HAS_MODEL = ["gemini", "openai", "anthropic"];
+
+function renderAI() {
+  aiList = S.ai.providers;
+  drawAI();
+  $("#a-delay").value = S.ai.agent.thinking_delay;
+  $("#a-delay-v").textContent = S.ai.agent.thinking_delay + " с";
+  $("#ai-presets").innerHTML = GROUPS.map(([g, title]) => {
+    const items = S.ai.presets.filter((pr) => pr.group === g);
+    return `<h3 class="grp">${esc(title)}</h3><div class="presets">` + items.map((pr) => `
+      <button class="preset" data-preset="${esc(pr.preset)}"><b>${esc(pr.name)}</b>${pill("mute", pr.badge)}<small>${esc(pr.about)}</small></button>`).join("") + "</div>";
+  }).join("");
+}
+
+function row(label, ctl) {
+  return `<div class="row"><span class="lbl">${label}</span><div class="ctl">${ctl}</div></div>`;
+}
+
+function providerCard(p, i, n) {
+  const id = esc(p.id);
+  const st = !p.enabled ? pill("mute", "выключен") : p.status.ready ? pill("ok", p.status.text) : pill("warn", p.status.text);
+  let rows = "";
+  if (p.can_install || p.can_login) {
+    const installed = p.status.need !== "install";
+    rows += row("Как подключить",
+      (p.can_install ? `<span class="step">1</span>` + (installed
+        ? `${pill("ok", "установлено")}<button class="btn small" data-act="install" title="Поставить заново">↻</button>`
+        : `<button class="btn" data-act="install">Установить</button>`) : "")
+      + `<span class="step">${p.can_install ? 2 : 1}</span><button class="btn" data-act="login">Войти в аккаунт</button>`
+      + `<span class="step">${p.can_install ? 3 : 2}</span><span class="hint" style="margin:0">«Проверить связь» ниже</span>`);
+  }
+  if (p.needs_key) {
+    rows += `<form class="row" onsubmit="return false"><span class="lbl">Ключ</span><div class="ctl">
+      <input type="password" class="grow" data-keyinput autocomplete="off"
+        placeholder="${p.has_key ? "сохранён " + esc(p.key_hint) : "вставьте ключ"}"
+        title="${p.has_key ? "Ключ сохранён. Вставьте новый, чтобы заменить" : "Вставьте ключ и нажмите «Сохранить ключ»"}">
+      <button type="button" class="btn" data-act="key">Сохранить ключ</button>
+      ${p.has_key ? `<button type="button" class="btn danger" data-act="unkey">Удалить</button>` : ""}
+      ${p.key_url ? `<a href="${esc(p.key_url)}" target="_blank">Где взять ключ →</a>` : ""}</div></form>`;
+  }
+  if (p.type === "openai" && p.edit_url) {
+    rows += row("Адрес", `<input type="text" class="grow" data-field="base_url" value="${esc(p.base_url)}" placeholder="https://…/v1">`);
+  }
+  if (HAS_MODEL.includes(p.type)) {
+    const names = modelLists[p.id] || [];
+    const opts = (p.model && !names.includes(p.model) ? [p.model] : []).concat(names);
+    rows += row("Модель", `<select class="grow" data-field="model">${p.model ? "" : `<option value="">— загрузите список и выберите —</option>`}`
+      + opts.map((m) => `<option value="${esc(m)}" ${m === p.model ? "selected" : ""}>${esc(m)}</option>`).join("")
+      + `</select><button class="btn" data-act="models">Загрузить список</button>`);
+  }
+  rows += row("Ищет в интернете", `<label class="switch"><input type="checkbox" data-field="search" ${p.search ? "checked" : ""}><span></span></label>
+    <span class="hint" style="margin:0">${p.search ? "отвечает и про погоду, новости" : "вопросы про свежие новости отдаст следующему"}</span>`);
+  rows += row("Проверка", `<button class="btn" data-act="test">Проверить связь</button><span class="hint" style="margin:0" data-testout></span>`);
+  if (p.allow_actions) rows += `<p class="hint" style="margin:10px 0 0">${pill("warn", "режим действий")} включён в config.json: может менять файлы, перед каждым поручением Джарвис переспросит.</p>`;
+  return `<div class="card" data-pid="${id}">
+    <div class="ph"><h2>${esc(p.name)} ${pill("mute", p.badge)} ${p.experimental ? pill("warn", "экспериментально") : ""} ${st}</h2>
+      <div class="ctl-r">
+        <button class="btn small" data-act="up" title="Спрашивать раньше" ${i === 0 ? "disabled" : ""}>↑</button>
+        <button class="btn small" data-act="down" title="Спрашивать позже" ${i === n - 1 ? "disabled" : ""}>↓</button>
+        <label class="switch" title="Включён"><input type="checkbox" data-field="enabled" ${p.enabled ? "checked" : ""}><span></span></label>
+        <button class="btn small danger" data-act="remove" title="Отключить совсем">✕</button>
+      </div></div>
+    <p class="hint">${i + 1}-й по очереди. ${esc(p.about)}</p>${rows}</div>`;
+}
+
+function drawAI() {
+  $("#ai-list").innerHTML = aiList.length ? aiList.map((p, i) => providerCard(p, i, aiList.length)).join("")
+    : `<div class="card"><div class="empty">Пока ни одного — нажмите «+ Подключить ИИ»</div></div>`;
+}
+
+async function saveAI() {
+  const r = await api("/api/ai/save", {providers: aiList.map((p) => ({id: p.id, enabled: p.enabled, search: p.search, model: p.model, base_url: p.base_url}))});
+  S.ai.providers = r.providers; aiList = r.providers;
+  drawAI(); renderStatus();
+}
+
+function pidOf(el) { const c = el.closest("[data-pid]"); return c ? c.dataset.pid : null; }
+function provider(pid) { return aiList.find((p) => p.id === pid); }
+
+$("#ai-list").addEventListener("change", (e) => {
+  const f = e.target.dataset.field; if (!f) return;
+  const p = provider(pidOf(e.target)); if (!p) return;
+  p[f] = e.target.type === "checkbox" ? e.target.checked : e.target.value.trim();
+  run(null, async () => { await saveAI(); toast("Сохранено"); });
+});
+
+$("#ai-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const pid = pidOf(b), p = provider(pid), card = b.closest("[data-pid]");
+  const i = aiList.indexOf(p);
+  const act = b.dataset.act;
+  if (act === "up" || act === "down") {
+    const j = act === "up" ? i - 1 : i + 1;
+    [aiList[i], aiList[j]] = [aiList[j], aiList[i]];
+    run(b, saveAI);
+  } else if (act === "remove") {
+    if (!confirm(`Отключить «${p.name}»? Ключ тоже удалится.`)) return;
+    run(b, async () => { const r = await api("/api/ai/remove", {id: pid}); S.ai.providers = aiList = r.providers; drawAI(); renderStatus(); });
+  } else if (act === "key") {
+    const key = card.querySelector("[data-keyinput]").value.trim();
+    if (!key) { toast("Сначала вставьте ключ", {err: true}); return; }
+    run(b, async () => {
+      const r = await api("/api/ai/key", {id: pid, key});
+      S.ai.providers = aiList = r.providers; drawAI(); renderStatus();
+      toast("Ключ сохранён");
+      const fresh = provider(pid);
+      if (HAS_MODEL.includes(fresh.type) && !fresh.model) await loadModels(pid);
+      else testProvider(pid);
+    });
+  } else if (act === "unkey") {
+    if (!confirm("Удалить ключ?")) return;
+    run(b, async () => { const r = await api("/api/ai/key", {id: pid, key: ""}); S.ai.providers = aiList = r.providers; drawAI(); renderStatus(); });
+  } else if (act === "models") {
+    run(b, () => loadModels(pid));
+  } else if (act === "test") {
+    run(b, () => testProvider(pid));
+  } else if (act === "install") {
+    run(b, async () => { await api("/api/ai/install", {id: pid}); toast("Открыл окно установки — дождитесь «Готово», потом «Войти в аккаунт»"); });
+  } else if (act === "login") {
+    run(b, async () => { await api("/api/ai/login", {id: pid}); toast("Открыл окно программы — войдите в аккаунт, потом закройте его и нажмите «Проверить связь»"); });
+  }
+});
+
+async function loadModels(pid) {
+  const r = await api("/api/ai/models", {id: pid});
+  if (!r.models.length) { toast("Список пустой", {err: true}); return; }
+  modelLists[pid] = r.models;
+  const p = provider(pid);
+  if (!p.model) { p.model = r.models[0]; await saveAI(); } else drawAI();
+  toast("Моделей: " + r.models.length + (p.model ? " — выбрана " + p.model : ""));
+  testProvider(pid);
+}
+
+async function testProvider(pid) {
+  const out = () => document.querySelector(`[data-pid="${CSS.escape(pid)}"] [data-testout]`);
+  if (out()) out().textContent = "спрашиваю…";
+  const r = await api("/api/ai/test", {id: pid});
+  if (out()) out().innerHTML = r.ok
+    ? pill("ok", (r.ms / 1000).toFixed(1) + " с") + " " + esc(r.text)
+    : pill("bad", "не ответил") + " " + esc(r.text);
+}
+
+$("#ai-add-btn").onclick = () => {
+  const box = $("#ai-add"); box.hidden = !box.hidden;
+  if (!box.hidden) box.scrollIntoView({behavior: "smooth", block: "start"});
+};
+$("#ai-presets").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-preset]"); if (!b) return;
+  run(b, async () => {
+    const r = await api("/api/ai/add", {preset: b.dataset.preset});
+    S.ai.providers = aiList = r.providers; drawAI(); renderStatus();
+    $("#ai-add").hidden = true;
+    const card = document.querySelector(`[data-pid="${CSS.escape(r.id)}"]`);
+    if (card) {
+      card.classList.add("flash"); card.scrollIntoView({behavior: "smooth", block: "center"});
+      const key = card.querySelector("[data-keyinput]"); if (key) key.focus();
+      setTimeout(() => card.classList.remove("flash"), 2500);
+    }
+  });
+});
+
+$("#a-delay").oninput = (e) => { $("#a-delay-v").textContent = e.target.value + " с"; };
+$("#a-delay").onchange = (e) => run(null, async () => {
+  await api("/api/settings", {agent: {thinking_delay: parseFloat(e.target.value)}});
+  toast("Сохранено");
+});
+
+// --- голос и слух -----------------------------------------------------------
+let voiceListsLoaded = false;
+function renderVoice() {
+  const s = S.settings, v = s.voice || {};
+  setRange("#v-rate", v.rate ?? 0, (x) => x);
+  setRange("#v-pitch", v.pitch ?? 1, (x) => Number(x).toFixed(2));
+  setRange("#v-vol", v.volume ?? 100, (x) => x + "%");
+  $("#v-greet").value = s.greeting || "";
+  $("#h-words").value = (s.wake_words || []).join(", ");
+  setRange("#h-sim", s.wake_similarity ?? 0.78, (x) => Number(x).toFixed(2));
+  $("#h-timeout").value = s.command_timeout ?? 20;
+  $("#h-follow").checked = !!s.follow_up;
+  $("#h-timeout").disabled = !s.follow_up;
+  renderPerf();
+}
+let perfModelInitial = "";
+function renderPerf() {
+  const s = S.settings, perf = s.performance || {}, models = s.models || [];
+  $("#perf-prio").checked = perf.low_priority !== false;
+  $("#perf-pause").checked = !!perf.pause_in_fullscreen;
+  $("#perf-model").innerHTML = models.length
+    ? models.map((m) => `<option value="${esc(m.path)}">${esc(m.label)}</option>`).join("")
+    : `<option value="">модель не найдена</option>`;
+  if (s.model_path && models.some((m) => m.path === s.model_path)) $("#perf-model").value = s.model_path;
+  else if (models.length) $("#perf-model").value = (models.find((m) => !m.small) || models[0]).path;
+  perfModelInitial = $("#perf-model").value;      // чтобы не просить перезапуск зря
+}
+$("#perf-save").onclick = (e) => run(e.target, async () => {
+  const body = {performance: {low_priority: $("#perf-prio").checked, pause_in_fullscreen: $("#perf-pause").checked}};
+  if ($("#perf-model").value !== perfModelInitial) body.model_path = $("#perf-model").value;
+  const r = await api("/api/settings", body);
+  await load();
+  if (r.restart) toast("Новая модель заработает после перезапуска", {action: {label: "Перезапустить", run: restart}});
+  else toast("Сохранено");
+});
+function setRange(sel, value, fmt) {
+  const el = $(sel), out = $(sel + "-v");
+  el.value = value; out.textContent = fmt(value);
+  el.oninput = () => { out.textContent = fmt(el.value); };
+}
+async function loadVoiceLists() {
+  if (voiceListsLoaded || !S) return;
+  voiceListsLoaded = true;
+  const v = S.settings.voice || {};
+  try {
+    const r = await api("/api/voices");
+    const ru = r.voices.filter((x) => /ru/i.test(x.lang) || /Pavel|Irina|Svetlana|Dmitry/i.test(x.name));
+    const rest = r.voices.filter((x) => !ru.includes(x));
+    const opt = (x) => `<option value="${esc(x.engine + "|" + x.name)}">${esc(x.name)} · ${x.engine === "onecore" ? "системный" : "SAPI"}</option>`;
+    $("#v-name").innerHTML = (ru.length ? `<optgroup label="Русские">${ru.map(opt).join("")}</optgroup>` : "")
+      + (rest.length ? `<optgroup label="Другие">${rest.map(opt).join("")}</optgroup>` : "");
+    const want = (v.name || "").toLowerCase();
+    const hit = r.voices.find((x) => x.name.toLowerCase().includes(want) && (v.engine === "auto" || !v.engine || x.engine === v.engine))
+      || r.voices.find((x) => x.name.toLowerCase().includes(want));
+    if (hit) $("#v-name").value = hit.engine + "|" + hit.name;
+  } catch (e) { $("#v-name").innerHTML = "<option>не удалось получить голоса</option>"; }
+  try {
+    const r = await api("/api/mics");
+    const cur = S.settings.mic_device;
+    $("#h-mic").innerHTML = `<option value="">Микрофон Windows по умолчанию</option>`
+      + r.mics.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}${m.default ? " — сейчас по умолчанию" : ""}</option>`).join("");
+    $("#h-mic").value = r.mics.some((m) => m.id === cur) ? cur : "";
+  } catch (e) { $("#h-mic").innerHTML = "<option>не удалось получить микрофоны</option>"; }
+}
+function voiceBody() {
+  const [engine, ...name] = $("#v-name").value.split("|");
+  const voice = {rate: +$("#v-rate").value, pitch: +$("#v-pitch").value, volume: +$("#v-vol").value};
+  if (name.length && (engine === "onecore" || engine === "sapi")) { voice.name = name.join("|"); voice.engine = engine; }
+  return {voice, greeting: $("#v-greet").value};
+}
+$("#v-save").onclick = (e) => run(e.target, async () => { await api("/api/settings", voiceBody()); toast("Голос сохранён"); await load(); });
+$("#v-test").onclick = (e) => run(e.target, async () => { await api("/api/settings", voiceBody()); await api("/api/voice/test", {}); });
+$("#h-follow").onchange = (e) => { $("#h-timeout").disabled = !e.target.checked; };
+$("#h-save").onclick = (e) => run(e.target, async () => {
+  const words = $("#h-words").value.split(/[,\n]/).map((w) => w.trim()).filter(Boolean);
+  const r = await api("/api/settings", {
+    wake_words: words, wake_similarity: +$("#h-sim").value,
+    command_timeout: +$("#h-timeout").value, follow_up: $("#h-follow").checked,
+    mic_device: $("#h-mic").value || null,
+  });
+  await load();
+  if (r.restart) toast("Новый микрофон заработает после перезапуска", {action: {label: "Перезапустить", run: restart}});
+  else toast("Сохранено");
+});
+
+// --- программы --------------------------------------------------------------
+function renderApps() {
+  appsRows = S.apps.map((a) => ({...a, aliases: (a.aliases || []).join(", ")}));
+  drawApps();
+  $("#games").innerHTML = S.games.length ? S.games.map((g) => `<span class="chip">${esc(g)}</span>`).join("") : `<span class="hint" style="margin:0">игр не нашёл</span>`;
+}
+function drawApps() {
+  $("#apps").innerHTML = appsRows.map((a, i) => `
+    <tr data-i="${i}">
+      <td><input type="text" data-k="name" value="${esc(a.name)}" placeholder="Телеграм"></td>
+      <td><input type="text" data-k="run" value="${esc(a.run)}" placeholder="telegram"></td>
+      <td><input type="text" data-k="aliases" value="${esc(a.aliases)}" placeholder="телега, телеграмм"></td>
+      <td class="act"><button class="btn small" data-act="try" title="Запустить">▶</button> <button class="btn small danger" data-act="del" title="Убрать">✕</button></td>
+    </tr>`).join("") || `<tr><td colspan="4" class="empty">Пусто — Джарвис ищет программы в меню «Пуск» сам</td></tr>`;
+}
+$("#apps").addEventListener("input", (e) => {
+  const tr = e.target.closest("tr"); if (!tr || !e.target.dataset.k) return;
+  appsRows[+tr.dataset.i][e.target.dataset.k] = e.target.value;
+});
+$("#apps").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const i = +b.closest("tr").dataset.i;
+  if (b.dataset.act === "del") { appsRows.splice(i, 1); drawApps(); }
+  if (b.dataset.act === "try") run(b, async () => { await api("/api/apps/launch", {run: appsRows[i].run}); toast("Запускаю " + appsRows[i].name); });
+});
+$("#app-add").onclick = () => {
+  appsRows.push({name: "", run: "", aliases: "", process: "", title: ""}); drawApps();
+  const inputs = $("#apps").querySelectorAll("tr:last-child input"); if (inputs[0]) inputs[0].focus();
+};
+$("#apps-save").onclick = (e) => run(e.target, async () => {
+  const apps = appsRows.map((a) => ({...a, aliases: a.aliases.split(",").map((x) => x.trim()).filter(Boolean)}));
+  const r = await api("/api/apps", {apps});
+  toast("Сохранено программ: " + r.count); await load();
+});
+
+// --- режимы -----------------------------------------------------------------
+// вид шага: [как называется, какое поле нужно]
+const STEPS = {
+  open: ["Открыть программу", "target"], focus: ["Показать программу", "target"],
+  minimize: ["Свернуть программу", "target"], close: ["Закрыть программу", "target"],
+  minimize_all: ["Свернуть все окна", ""], restore_all: ["Вернуть все окна", ""],
+  tile: ["Разложить окна программы", "target"], volume: ["Громкость, %", "number"],
+  pause: ["Пауза / продолжить музыку", ""], url: ["Открыть сайт", "url"],
+  power: ["Питание", "power"], wait: ["Подождать, сек", "number"], say: ["Сказать вслух", "text"],
+};
+const TEMPLATES = {
+  work: {name: "Рабочий режим", phrases: ["рабочий режим", "начинаем работу"], confirm_close: true, steps: [
+    {do: "open", target: "Телеграм"}, {do: "open", target: "Один Эс"}, {do: "volume", value: 30},
+    {do: "say", target: "Рабочий режим, сэр. Удачного дня."}]},
+  evening: {name: "Конец дня", phrases: ["конец дня", "заканчиваем работу"], confirm_close: true, steps: [
+    {do: "close", target: "Один Эс"}, {do: "minimize_all"}, {do: "power", value: "balanced"},
+    {do: "say", target: "Хорошего вечера, сэр."}]},
+  movie: {name: "Кино", phrases: ["режим кино", "смотрим кино"], confirm_close: true, steps: [
+    {do: "minimize_all"}, {do: "volume", value: 70}, {do: "say", target: "Приятного просмотра."}]},
+};
+let modes = [];
+let modesDirty = false;
+
+function renderModes() {
+  modes = JSON.parse(JSON.stringify(S.modes || []));
+  modesDirty = false;
+  $("#modes-dirty").textContent = "";
+  drawModes();
+  const names = new Set();
+  S.apps.forEach((a) => { names.add(a.name); (a.aliases || []).forEach((x) => names.add(x)); });
+  S.games.forEach((g) => names.add(g));
+  $("#app-names").innerHTML = [...names].map((n) => `<option value="${esc(n)}">`).join("");
+  renderGame();
+}
+function markDirty() { modesDirty = true; $("#modes-dirty").textContent = "есть несохранённые изменения"; }
+
+function stepRow(s, i, n) {
+  const kind = (STEPS[s.do] || ["", ""])[1];
+  const v = (x) => esc(x ?? "");
+  const ctl = {
+    target: `<input type="text" class="grow" list="app-names" data-sk="target" value="${v(s.target)}" placeholder="программа, например Телеграм">`,
+    url: `<input type="text" class="grow" data-sk="target" value="${v(s.target)}" placeholder="сайт: телеграм, ютуб, youtube.com…">`,
+    text: `<input type="text" class="grow" data-sk="target" value="${v(s.target)}" placeholder="что сказать">`,
+    number: `<input type="number" data-sk="value" value="${v(s.value)}" style="width:90px" min="0" max="${s.do === "wait" ? 30 : 100}">`,
+    power: `<select data-sk="value"><option value="high" ${s.value === "high" ? "selected" : ""}>максимальная производительность</option>`
+      + `<option value="balanced" ${s.value !== "high" ? "selected" : ""}>обычная (сбалансированная)</option></select>`,
+  }[kind] || "";
+  return `<tr data-si="${i}"><td style="width:34%"><select data-sk="do" style="width:100%">`
+    + Object.entries(STEPS).map(([k, [label]]) => `<option value="${k}" ${k === s.do ? "selected" : ""}>${esc(label)}</option>`).join("")
+    + `</select></td><td><div style="display:flex;gap:8px">${ctl}</div></td>
+    <td class="act"><button class="btn small" data-ma="sup" ${i === 0 ? "disabled" : ""}>↑</button>
+      <button class="btn small" data-ma="sdown" ${i === n - 1 ? "disabled" : ""}>↓</button>
+      <button class="btn small danger" data-ma="sdel">✕</button></td></tr>`;
+}
+
+function modeCard(m, i) {
+  const steps = m.steps || [];
+  return `<div class="card" data-mi="${i}">
+    <div class="ph"><h2>${esc(m.name || "Новый режим")}</h2><div class="ctl-r">
+      <button class="btn small" data-ma="run" title="Выполнить сейчас">▶ Проверить</button>
+      <button class="btn small danger" data-ma="del" title="Удалить режим">✕</button></div></div>
+    <div class="row"><span class="lbl">Название</span><div class="ctl"><input type="text" class="grow" data-mk="name" value="${esc(m.name)}" placeholder="Рабочий режим"></div></div>
+    <div class="row"><span class="lbl">Как включать — фразы через запятую</span><div class="ctl"><input type="text" class="grow" data-mk="phrases" value="${esc((m.phrases || []).join(", "))}" placeholder="рабочий режим, начинаем работу"></div></div>
+    <div class="row"><span class="lbl">Спрашивать перед закрытием</span><div class="ctl"><label class="switch"><input type="checkbox" data-mk="confirm_close" ${m.confirm_close !== false ? "checked" : ""}><span></span></label><span class="hint" style="margin:0">чтобы не потерять несохранённое</span></div></div>
+    <div class="row"><span class="lbl">Что делать по порядку</span><div class="ctl" style="display:block">
+      <table><tbody>${steps.map((s, j) => stepRow(s, j, steps.length)).join("") || `<tr><td class="empty">Пока ни одного шага</td></tr>`}</tbody></table>
+      <div class="actions" style="margin-top:8px"><button class="btn small" data-ma="sadd">+ шаг</button></div></div></div>
+  </div>`;
+}
+function drawModes() {
+  $("#modes-list").innerHTML = modes.length ? modes.map(modeCard).join("")
+    : `<div class="card"><div class="empty">Пока ни одного. Нажмите «+ Новый режим» или возьмите шаблон.</div></div>`;
+}
+function stepOf(el) {
+  const m = modes[+el.closest("[data-mi]").dataset.mi];
+  const row = el.closest("[data-si]");
+  return [m, row ? +row.dataset.si : -1];
+}
+
+$("#modes-list").addEventListener("input", (e) => {
+  if (!e.target.closest("[data-mi]")) return;
+  const [m, si] = stepOf(e.target);
+  const mk = e.target.dataset.mk, sk = e.target.dataset.sk;
+  if (mk === "name") m.name = e.target.value;
+  if (mk === "phrases") m.phrases = e.target.value.split(",").map((x) => x.trim()).filter(Boolean);
+  if (mk === "confirm_close") m.confirm_close = e.target.checked;
+  if (sk && si >= 0) m.steps[si][sk] = e.target.value;
+  markDirty();
+});
+$("#modes-list").addEventListener("change", (e) => {
+  if (e.target.dataset.sk !== "do") return;
+  const [m, si] = stepOf(e.target);       // другой вид шага — другие поля
+  m.steps[si] = {do: e.target.value, ...(e.target.value === "power" ? {value: "high"} : {})};
+  drawModes(); markDirty();
+});
+$("#modes-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-ma]"); if (!b) return;
+  const [m, si] = stepOf(b);
+  const a = b.dataset.ma;
+  if (a === "run") {
+    if (modesDirty || !m.id) { toast("Сначала сохраните режимы", {err: true}); return; }
+    run(b, async () => { const r = await api("/api/modes/run", {id: m.id}); toast("Выполнил: " + r.said); });
+    return;
+  }
+  if (a === "del") {
+    if (!confirm(`Удалить режим «${m.name || "без названия"}»?`)) return;
+    modes.splice(modes.indexOf(m), 1);
+  } else if (a === "sadd") m.steps.push({do: "open", target: ""});
+  else if (a === "sdel") m.steps.splice(si, 1);
+  else if (a === "sup" || a === "sdown") {
+    const j = a === "sup" ? si - 1 : si + 1;
+    [m.steps[si], m.steps[j]] = [m.steps[j], m.steps[si]];
+  }
+  drawModes(); markDirty();
+});
+const newId = () => "m" + Date.now().toString(36);
+$("#mode-add").onclick = () => {
+  modes.push({id: newId(), name: "", phrases: [], confirm_close: true, steps: [{do: "open", target: ""}]});
+  drawModes(); markDirty();
+  const last = $("#modes-list").lastElementChild; if (last) last.scrollIntoView({behavior: "smooth", block: "center"});
+};
+$("#mode-tpl").onchange = (e) => {
+  const t = TEMPLATES[e.target.value]; if (!t) return;
+  modes.push({id: newId(), ...JSON.parse(JSON.stringify(t))});
+  e.target.value = "";
+  drawModes(); markDirty();
+};
+$("#modes-save").onclick = (e) => run(e.target, async () => {
+  const r = await api("/api/modes", {modes});
+  S.modes = r.modes; renderModes();
+  if (r.clash.length) toast("Сохранено, но у разных режимов одинаковые фразы: " + r.clash.join("; "), {err: true});
+  else toast("Режимы сохранены — можно говорить");
+});
+
+// --- игровой режим ---------------------------------------------------------
+let gmClose = [];
+function renderGame() {
+  const gm = S.game_mode || {};
+  gmClose = Object.entries(gm.close || {}).map(([name, process]) => ({name, process}));
+  drawGame();
+  $("#gm-power").checked = gm.power_plan !== false;
+  $("#gm-volume").value = gm.volume ?? "";
+}
+function drawGame() {
+  $("#gm-close").innerHTML = gmClose.map((c, i) => `<tr data-gi="${i}">
+    <td><input type="text" data-gk="name" value="${esc(c.name)}" placeholder="как назвать вслух"></td>
+    <td><input type="text" data-gk="process" value="${esc(c.process)}" placeholder="процесс, например 1cv8"></td>
+    <td class="act"><button class="btn small danger" data-gdel>✕</button></td></tr>`).join("")
+    || `<tr><td class="empty">Ничего не закрывает</td></tr>`;
+}
+async function loadRunning() {
+  try {
+    const r = await api("/api/windows");
+    $("#gm-running").innerHTML = `<option value="">+ добавить из открытых сейчас…</option>`
+      + r.windows.map((w) => `<option value="${esc(w.exe)}">${esc(w.exe)} — ${esc(w.title)}</option>`).join("");
+  } catch (e) { /* не страшно */ }
+}
+$("#gm-close").addEventListener("input", (e) => {
+  const tr = e.target.closest("[data-gi]");
+  if (tr && e.target.dataset.gk) gmClose[+tr.dataset.gi][e.target.dataset.gk] = e.target.value;
+});
+$("#gm-close").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-gdel]"); if (!b) return;
+  gmClose.splice(+b.closest("[data-gi]").dataset.gi, 1); drawGame();
+});
+$("#gm-add").onclick = () => { gmClose.push({name: "", process: ""}); drawGame(); };
+$("#gm-running").onchange = (e) => {
+  const exe = e.target.value; if (!exe) return;
+  gmClose.push({name: exe, process: exe}); e.target.value = ""; drawGame();
+};
+$("#gm-save").onclick = (e) => run(e.target, async () => {
+  const r = await api("/api/game_mode", {close: gmClose, power_plan: $("#gm-power").checked, volume: $("#gm-volume").value});
+  S.game_mode = r.game_mode; renderGame(); toast("Сохранено");
+});
+
+// --- таймеры и напоминания -------------------------------------------------
+function left(s) {
+  if (s < 60) return s + " с";
+  if (s < 3600) return Math.floor(s / 60) + " мин";
+  if (s < 86400) return Math.floor(s / 3600) + " ч " + Math.floor((s % 3600) / 60) + " мин";
+  return Math.floor(s / 86400) + " дн";
+}
+function renderReminders() {
+  const items = S.reminders || [];
+  $("#rem-list").innerHTML = items.length ? items.map((r) => `<tr data-rid="${esc(r.id)}">
+      <td style="width:110px">${pill(r.kind === "timer" ? "ok" : "mute", r.kind === "timer" ? "таймер" : "напоминание")}</td>
+      <td>${esc(r.text)}</td>
+      <td style="width:170px"><span class="hint" style="margin:0">${esc(r.at.slice(0, 16).replace("T", " "))} · через ${left(r.left_s)}</span></td>
+      <td class="act"><button class="btn small danger" data-remcancel>Отменить</button></td></tr>`).join("")
+    : `<tr><td class="empty">Ничего не запланировано</td></tr>`;
+}
+$("#rem-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-remcancel]"); if (!b) return;
+  run(b, async () => {
+    const r = await api("/api/reminders/cancel", {id: b.closest("[data-rid]").dataset.rid});
+    S.reminders = r.reminders; renderReminders(); toast("Отменил");
+  });
+});
+
+// --- память -----------------------------------------------------------------
+function renderMemory() {
+  $("#mem-auto").checked = S.memory.auto;
+  const facts = S.memory.facts.slice().reverse();      // новое — сверху
+  $("#mem-list").innerHTML = facts.length ? facts.map((f) => `<tr data-fid="${f.id}">
+      <td><input type="text" style="width:100%" value="${esc(f.text)}" data-memtext></td>
+      <td>${f.source === "auto" ? pill("ok", "сам") : pill("mute", "вы")}</td>
+      <td><span class="hint" style="margin:0">${esc(f.added || "")}</span></td>
+      <td class="act"><button class="btn small danger" data-memdel title="Забыть">✕</button></td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">Пока ничего. Скажите «Джарвис, запомни, что…» или добавьте выше.</td></tr>`;
+}
+function setFacts(r) { S.memory.facts = r.facts; renderMemory(); }
+$("#mem-list").addEventListener("change", (e) => {
+  if (!e.target.matches("[data-memtext]")) return;
+  const id = +e.target.closest("[data-fid]").dataset.fid;
+  run(null, async () => { setFacts(await api("/api/memory/update", {id, text: e.target.value})); toast("Сохранено"); });
+});
+$("#mem-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-memdel]"); if (!b) return;
+  const id = +b.closest("[data-fid]").dataset.fid;
+  run(b, async () => { setFacts(await api("/api/memory/remove", {id})); toast("Забыл"); });
+});
+$("#mem-add").onclick = (e) => run(e.target, async () => {
+  const text = $("#mem-new").value.trim(); if (!text) return;
+  setFacts(await api("/api/memory/add", {text}));
+  $("#mem-new").value = ""; toast("Запомнил");
+});
+$("#mem-auto").onchange = (e) => run(null, async () => {
+  await api("/api/settings", {memory_auto: e.target.checked});
+  S.memory.auto = e.target.checked;
+  toast(e.target.checked ? "Будет запоминать сам" : "Запоминает только по просьбе");
+});
+$("#city-save").onclick = (e) => run(e.target, async () => {
+  await api("/api/settings", {city: $("#city").value}); toast("Сохранено");
+});
+
+// --- ослышки ----------------------------------------------------------------
+function renderLearned() {
+  const items = Object.entries(S.learned || {});
+  $("#learned").innerHTML = items.length ? items.map(([heard, cmd]) => `
+    <tr><td>${esc(heard)}</td><td><b>${esc(cmd)}</b></td>
+      <td class="act"><button class="btn small danger" data-forget="${esc(heard)}">Забыть</button></td></tr>`).join("")
+    : `<tr><td colspan="3" class="empty">Пока ничего не выучил</td></tr>`;
+}
+$("#learned").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-forget]"); if (!b) return;
+  run(b, async () => { const r = await api("/api/learned/forget", {phrase: b.dataset.forget}); S.learned = r.learned; renderLearned(); toast("Забыл"); });
+});
+
+// --- журнал -----------------------------------------------------------------
+const KINDS = {cmd: ["Команда", "ok"], heard: ["Услышал", "mute"], say: ["Ответил", "mute"],
+  brain: ["ИИ", "ok"], error: ["Ошибка", "bad"], warn: ["Внимание", "warn"], start: ["Запуск", "mute"]};
+$("#log-f").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  logFilter = b.dataset.f;
+  document.querySelectorAll("#log-f button").forEach((x) => x.classList.toggle("on", x === b));
+  loadLog();
+});
+async function loadLog() {
+  let r;
+  try { r = await api("/api/log"); } catch (e) { return; }
+  const want = {all: null, cmd: ["cmd", "heard"], brain: ["brain", "say"], error: ["error", "warn"]}[logFilter];
+  const rows = r.lines.filter((l) => !want || want.includes(l.kind)).reverse().slice(0, 150);
+  let day = "";
+  $("#log").innerHTML = rows.length ? rows.map((l) => {
+    const k = KINDS[l.kind] || [l.kind, "mute"];
+    const head = l.day !== day ? `<div class="hint" style="margin:12px 0 2px">${esc(l.day)}</div>` : "";
+    day = l.day;
+    return head + `<div class="ln"><span class="t">${esc(l.time)}</span><span class="b">${pill(k[1], k[0])}</span><span class="m">${esc(l.text)}</span></div>`;
+  }).join("") : `<div class="empty">Пусто</div>`;
+}
+
+// --- поделиться -------------------------------------------------------------
+$("#pack").onclick = (e) => run(e.target, async () => {
+  $("#pack-out").textContent = "собираю…";
+  const r = await api("/api/package", {});
+  $("#pack-out").innerHTML = "Готово: <code>" + esc(r.path) + "</code> — папка открыта, файл выделен";
+});
+
+// --- старт ------------------------------------------------------------------
+if (!TOKEN) {
+  gate("Откройте панель из трея: щелчок по значку Джарвиса.");
+} else {
+  load().then(() => {
+    let tab = "home";
+    try { tab = sessionStorage.getItem("tab") || "home"; } catch (e) { /* не важно */ }
+    show(tab);
+    if (hashArgs.get("add")) $("#ai-add").hidden = false;     // для снимков панели
+  }).catch(() => {});
+  setInterval(async () => {          // статус в углу — раз в 5 секунд
+    try {
+      const st = await api("/api/state");
+      S.status = st.status; S.reminders = st.reminders;
+      renderStatus(); renderReminders();
+    } catch (e) { /* молча */ }
+  }, 5000);
+}
+</script>
+</body>
+</html>
