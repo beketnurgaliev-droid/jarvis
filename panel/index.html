@@ -305,10 +305,17 @@ h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; colo
     <h2>Производительность</h2>
     <p class="hint" style="margin:0 0 10px">Чтобы Джарвис в фоне не мешал играм и работе — особенно на слабом ПК.</p>
     <div class="row"><label for="perf-model">Модель распознавания</label><div class="ctl"><select id="perf-model" class="grow"><option>загружаю…</option></select></div></div>
+    <p class="hint" id="perf-model-note" style="margin:0 0 8px"></p>
+    <div class="row"><span class="lbl">Не слушать тишину</span><div class="ctl"><label class="switch"><input type="checkbox" id="perf-silence"><span></span></label><span class="hint" style="margin:0">пока в комнате тихо, распознавание отдыхает — процессор свободен</span></div></div>
     <div class="row"><span class="lbl">Не мешать играм и программам</span><div class="ctl"><label class="switch"><input type="checkbox" id="perf-prio"><span></span></label><span class="hint" style="margin:0">пониженный приоритет процесса — Windows отдаёт процессор игре первым</span></div></div>
     <div class="row"><span class="lbl">Пауза распознавания в полноэкранной игре</span><div class="ctl"><label class="switch"><input type="checkbox" id="perf-pause"><span></span></label><span class="hint" style="margin:0">в игре на весь экран не слушает — процессор свободен</span></div></div>
-    <p class="hint" style="margin:10px 0 0">Маленькая модель грузит процессор в разы меньше — выбор для слабого ПК, но слышит чуть хуже. Смена модели применится после перезапуска. С паузой в игре голос вернётся, когда свернёте игру.</p>
+    <p class="hint" style="margin:10px 0 0">Почти всю память и процессор Джарвиса занимает модель распознавания. Маленькая берёт ~0,6 ГБ памяти вместо ~1,6 ГБ, но слышит чуть хуже. Модель меняется на ходу, без перезапуска. С паузой в игре голос вернётся, когда свернёте игру.</p>
     <div class="actions"><button class="btn primary" id="perf-save">Сохранить</button></div>
+  </div>
+  <div class="card">
+    <h2>Место на диске</h2>
+    <p class="hint" id="space-rt" style="margin:0 0 10px"></p>
+    <div id="space-list"></div>
   </div>
 </section>
 
@@ -782,23 +789,53 @@ function renderVoice() {
 }
 let perfModelInitial = "";
 function renderPerf() {
-  const s = S.settings, perf = s.performance || {}, models = s.models || [];
+  const s = S.settings, perf = s.performance || {}, models = s.models || [], m = s.model || {};
   $("#perf-prio").checked = perf.low_priority !== false;
   $("#perf-pause").checked = !!perf.pause_in_fullscreen;
-  $("#perf-model").innerHTML = models.length
-    ? models.map((m) => `<option value="${esc(m.path)}">${esc(m.label)}</option>`).join("")
-    : `<option value="">модель не найдена</option>`;
-  if (s.model_path && models.some((m) => m.path === s.model_path)) $("#perf-model").value = s.model_path;
-  else if (models.length) $("#perf-model").value = (models.find((m) => !m.small) || models[0]).path;
-  perfModelInitial = $("#perf-model").value;      // чтобы не просить перезапуск зря
+  $("#perf-silence").checked = perf.skip_silence !== false;
+  $("#perf-model").innerHTML = [`<option value="">Автоматически — на этом ПК ${esc(m.auto || "")}</option>`]
+    .concat(models.map((x) => `<option value="${esc(x.path)}">${esc(x.label)}</option>`)).join("");
+  $("#perf-model").value = models.some((x) => x.path === s.model_path) ? s.model_path : "";
+  perfModelInitial = $("#perf-model").value;      // чтобы не менять модель зря
+  let note = `Сейчас работает ${m.now_small ? "маленькая" : "большая"} модель. Памяти на этом ПК — ${String(m.ram_gb ?? "?").replace(".", ",")} ГБ.`;
+  if (m.downloading) note += " Скачиваю маленькую модель — Джарвис перейдёт на неё сам.";
+  else if (m.pending) note += " Меняю модель — это несколько секунд.";
+  else if (m.error) note += " Маленькая модель не скачалась: " + m.error;
+  else if (m.weak && !m.now_small) note += " Для такого ПК советую «Автоматически» — освободится около 1 ГБ памяти.";
+  $("#perf-model-note").textContent = note;
+  renderSpace();
+}
+const fmtSize = (mb) => mb >= 1024 ? (mb / 1024).toFixed(1).replace(".", ",") + " ГБ" : mb + " МБ";
+function renderSpace() {
+  const s = S.settings, items = s.space || [], rt = s.runtime || {};
+  let text;
+  if (rt.running) text = "Джарвис работает на своём Python внутри своей папки." + (rt.dev ? ""
+    : " Python, установленный в систему, ему не нужен: если он стоял только ради Джарвиса — его можно удалить в «Параметры → Приложения».");
+  else if (rt.downloading) text = "Скачиваю свой Python для Джарвиса — после этого Python в системе ему будет не нужен.";
+  else if (rt.failed) text = "На своём Python Джарвис не запустился — работает на Python из системы, его не удаляйте.";
+  else text = "Джарвис работает на Python из системы — его не удаляйте." + (rt.error ? " Свой Python пока не скачался: " + rt.error : "");
+  $("#space-rt").textContent = text;
+  $("#space-list").innerHTML = items.length ? items.map((i) =>
+    `<div class="row"><span class="lbl">${esc(i.title)}<br><span class="hint" style="margin:0">${esc(i.about)}</span></span>`
+    + `<div class="ctl" style="justify-content:flex-end"><span class="val">${fmtSize(i.size_mb)}</span><button class="btn" data-free="${esc(i.id)}">Удалить</button></div></div>`).join("")
+    : `<p class="hint" style="margin:0">Лишнего нет — всё, что лежит в папке, Джарвису нужно.</p>`;
+  document.querySelectorAll("#space-list [data-free]").forEach((b) => b.onclick = () => run(b, async () => {
+    const it = items.find((x) => x.id === b.dataset.free);
+    if (!it || !confirm(`Удалить: ${it.title}?\nОсвободится ${fmtSize(it.size_mb)}.`)) return;
+    const r = await api("/api/space/free", {id: it.id});
+    await load();
+    toast("Освобождено " + fmtSize(r.freed_mb));
+  }));
 }
 $("#perf-save").onclick = (e) => run(e.target, async () => {
-  const body = {performance: {low_priority: $("#perf-prio").checked, pause_in_fullscreen: $("#perf-pause").checked}};
-  if ($("#perf-model").value !== perfModelInitial) body.model_path = $("#perf-model").value;
-  const r = await api("/api/settings", body);
+  const body = {performance: {low_priority: $("#perf-prio").checked, pause_in_fullscreen: $("#perf-pause").checked,
+                              skip_silence: $("#perf-silence").checked}};
+  const modelChanged = $("#perf-model").value !== perfModelInitial;
+  if (modelChanged) body.model_path = $("#perf-model").value;
+  await api("/api/settings", body);
   await load();
-  if (r.restart) toast("Новая модель заработает после перезапуска", {action: {label: "Перезапустить", run: restart}});
-  else toast("Сохранено");
+  toast(modelChanged ? "Сохранено — модель меняется, это несколько секунд" : "Сохранено");
+  if (modelChanged) setTimeout(() => load().catch(() => {}), 6000);
 });
 function setRange(sel, value, fmt) {
   const el = $(sel), out = $(sel + "-v");

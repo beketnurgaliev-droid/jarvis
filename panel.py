@@ -26,7 +26,9 @@ import brain
 import games
 import keys
 import memory
+import models
 import reminders
+import runtime
 import skills
 import updater
 import version
@@ -154,21 +156,54 @@ def _com(func):
 
 def _models():
     """Модели распознавания рядом со скриптом — для выбора в панели.
-    Маленькая грузит процессор в разы меньше (слабый ПК), большая слышит точнее."""
+    Маленькая грузит процессор и память в разы меньше (слабый ПК), большая
+    слышит точнее. Плюс «Автоматически» (path "") — по памяти этого ПК."""
     out = []
-    for folder in sorted(HOME.glob("vosk-model-*")):
-        if not folder.is_dir():
-            continue
-        small = "small" in folder.name.lower()
+    for folder in models.folders():
+        small = models.is_small(folder)
         out.append({
             "path": folder.name,
             "small": small,
-            "label": ("Маленькая — быстрая, для слабого ПК" if small
-                      else "Большая — точнее, но грузит процессор"),
+            "label": ("Маленькая — ~0,6 ГБ памяти, для слабого ПК" if small
+                      else "Большая — точнее, но ~1,6 ГБ памяти и больше процессора"),
         })
     # маленькую показываем первой — это и есть выбор для слабого ПК
     out.sort(key=lambda m: not m["small"])
     return out
+
+
+def _model_state(app):
+    auto = models.choose("")
+    auto_small = models.need_small("") or (auto is not None and models.is_small(auto))
+    chosen = models.choose(app.cfg.get("model_path", ""))
+    return {
+        "now": app.model_folder.name,
+        "now_small": models.is_small(app.model_folder),
+        "auto": "маленькая" if auto_small else "большая",
+        "ram_gb": round(models.ram_gb(), 1),
+        "weak": models.weak_pc(),
+        "downloading": models.STATE["downloading"],
+        "error": models.STATE["error"],
+        "pending": chosen is not None and chosen.resolve() != app.model_folder.resolve(),
+    }
+
+
+def _space(app):
+    """Что можно удалить, чтобы освободить место на диске."""
+    keep = [app.model_folder, models.choose(app.cfg.get("model_path", ""))]
+    return models.space_items(keep) + runtime.space_items()
+
+
+def api_space_free(p, body):
+    item = next((i for i in _space(p.app) if i["id"] == str(body.get("id"))), None)
+    if item is None:
+        raise ValueError("Это уже удалено или сейчас нужно Джарвису")
+    path = Path(item["path"]).resolve()
+    if HOME.resolve() not in path.parents:
+        raise ValueError("Это не в папке Джарвиса")
+    shutil.rmtree(path)
+    log.info("Освободил место: %s — %d МБ", item["title"], item["size_mb"])
+    return {"ok": True, "freed_mb": item["size_mb"]}
 
 
 def _apps_list(cfg):
@@ -229,9 +264,13 @@ def api_state(p, _body):
             "performance": {
                 "low_priority": cfg.get("performance", {}).get("low_priority", True),
                 "pause_in_fullscreen": cfg.get("performance", {}).get("pause_in_fullscreen", False),
+                "skip_silence": cfg.get("performance", {}).get("skip_silence", True),
             },
             "model_path": cfg.get("model_path", ""),
             "models": _models(),
+            "model": _model_state(p.app),
+            "space": [{k: v for k, v in item.items() if k != "path"} for item in _space(p.app)],
+            "runtime": runtime.status(),
         },
         "ai": {
             "providers": _ai_state(cfg),
@@ -371,13 +410,19 @@ def api_settings(p, body):
             perf_cfg["low_priority"] = bool(src["low_priority"])
         if "pause_in_fullscreen" in src:
             perf_cfg["pause_in_fullscreen"] = bool(src["pause_in_fullscreen"])
-        p.app.apply_performance()        # приоритет и пауза применяются сразу
+        if "skip_silence" in src:
+            perf_cfg["skip_silence"] = bool(src["skip_silence"])
+        p.app.apply_performance()        # приоритет, пауза и тишина применяются сразу
+    model_changed = False
     if "model_path" in body:
-        model = str(body["model_path"]).strip()
-        if model and model in {m["path"] for m in _models()} and model != cfg.get("model_path"):
-            cfg["model_path"] = model     # модель грузится при старте — нужен перезапуск
-            restart = True
+        model = str(body["model_path"]).strip()   # "" — автоматически, по памяти ПК
+        if (not model or model in {m["path"] for m in _models()}) and model != cfg.get("model_path", ""):
+            cfg["model_path"] = model
+            model_changed = True
     save_config(cfg)
+    if model_changed:                    # меняется на ходу, без перезапуска
+        p.app.switch_model()
+        models.start(p.app)              # «автоматически» на слабом ПК — докачать маленькую
     return {"ok": True, "restart": restart}
 
 
@@ -745,6 +790,7 @@ POST_ROUTES = {
     "/api/update/settings": api_update_settings,
     "/api/package": api_package,
     "/api/open": api_open,
+    "/api/space/free": api_space_free,
 }
 
 

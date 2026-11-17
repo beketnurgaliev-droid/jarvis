@@ -22,9 +22,11 @@ from PIL import Image, ImageDraw
 import ai
 import brain
 import games
+import models
 import panel
 import perf
 import reminders
+import runtime
 import skills
 import updater
 import version
@@ -62,33 +64,12 @@ def normalize(text):
 
 
 def find_model(configured=""):
-    """Папка модели Vosk: из настроек, иначе первая vosk-model-* рядом со скриптом.
+    """Папка модели Vosk: из настроек, иначе — по ПК (на слабом маленькая).
     Так конфиг не привязан к конкретной машине."""
-    if configured:
-        path = Path(configured)
-        if not path.is_absolute():
-            path = HOME / path
-        if path.is_dir():
-            return _ascii_path(str(path))
-        log.warning("Модель по пути из настроек не найдена: %s", configured)
-    for candidate in sorted(HOME.glob("vosk-model-*")):
-        if candidate.is_dir():
-            return _ascii_path(str(candidate))
-    raise SystemExit("Не найдена модель распознавания — запусти install.ps1")
-
-
-def _ascii_path(path):
-    """Vosk не открывает модель по пути с русскими буквами («C:\\Users\\Алексей\\…»).
-    Короткое имя DOS (C:\\Users\\5D3B~1\\…) — латиницей, им и пользуемся."""
-    if path.isascii():
-        return path
-    import ctypes
-
-    buf = ctypes.create_unicode_buffer(1024)
-    if ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf)) and buf.value.isascii():
-        return buf.value
-    log.warning("В пути к модели русские буквы, а короткого имени нет: %s", path)
-    return path
+    folder = models.choose(configured)
+    if folder is None:
+        raise SystemExit("Не найдена модель распознавания — запусти install.ps1")
+    return folder
 
 
 class Jarvis:
@@ -118,8 +99,35 @@ class Jarvis:
         self.icon = None
 
         self.voice = self._make_voice()
-        self.listener = Listener(find_model(cfg.get("model_path", "")),
-                                 cfg.get("mic_device"))
+        self.model_folder = find_model(cfg.get("model_path", ""))   # настоящее имя папки
+        self.listener = Listener(models.ascii_path(self.model_folder), cfg.get("mic_device"),
+                                 skip_silence=cfg.get("performance", {}).get("skip_silence", True))
+        self._model_lock = threading.Lock()
+        log.info("Памяти на ПК %.0f ГБ, модель: %s", models.ram_gb(), self.model_folder.name)
+
+    def switch_model(self):
+        """Модель по настройкам отличается от загруженной — сменить на ходу,
+        фоном и когда с Джарвисом не говорят. Прежняя освобождает память."""
+        def job():
+            with self._model_lock:
+                folder = models.choose(self.cfg.get("model_path", ""))
+                if folder is None or folder.resolve() == self.model_folder.resolve():
+                    return
+                while self.busy.is_set() or self.mode != "idle":
+                    time.sleep(1)
+                try:
+                    self.listener.swap_model(models.ascii_path(folder))
+                except Exception:
+                    log.exception("Модель %s не загрузилась — остаюсь на прежней", folder.name)
+                    return
+                # подменяет поток распознавания на следующем кусочке звука (¼ с)
+                for _ in range(40):
+                    if self.listener._next_model is None:
+                        break
+                    time.sleep(0.25)
+                self.model_folder = folder
+
+        threading.Thread(target=job, daemon=True, name="model").start()
 
     def _make_voice(self):
         voice_cfg = self.cfg.get("voice", {})
@@ -168,6 +176,28 @@ class Jarvis:
             if len(w) >= 4 and SequenceMatcher(None, w, key).ratio() >= threshold:
                 return True
         return False
+
+    # слова команд, ради которых фразу без имени стоит записать: по ним видно,
+    # как Vosk расслышал «Джарвис», когда он не откликнулся (игра, шум, чат)
+    NEAR_MISS = re.compile(r"(следующ|трек|дальше|переключ|пропусти|скип|некст|песн|ютуб)")
+
+    def log_near_miss(self, phrase):
+        """Фраза без имени, но с командным словом — в журнал только кусок
+        вокруг этого слова и самое похожее на имя слово перед ним. Разговоры
+        целиком на диск по-прежнему не попадают."""
+        words = normalize(phrase).split()
+        hit = next((i for i, w in enumerate(words) if self.NEAR_MISS.match(w)), None)
+        if hit is None:
+            return
+        best, score = "", 0.0
+        for w in words[max(0, hit - 6):hit]:
+            for key in self.cfg["wake_words"]:
+                r = SequenceMatcher(None, w, key).ratio()
+                if r > score:
+                    best, score = w, r
+        log.info("Без имени, похоже на команду: «%s» (ближе всего к имени: %s)",
+                 " ".join(words[max(0, hit - 4):hit + 4]),
+                 f"«{best}» {score:.2f}" if score >= 0.5 else "—")
 
     def split_wake(self, text):
         """Отделить обращение от самой команды."""
@@ -294,7 +324,30 @@ class Jarvis:
             return result.ask
         if result.action:
             result.action()
+        if result.work is not None:
+            return self.wait_for(result.work, result.say)
         return result.say
+
+    def wait_for(self, work, phrase=None):
+        """Долгая локальная работа (снимок экрана + ИИ, диктовка). phrase
+        («Секунду, смотрю») — только если она задумалась: Gemini часто
+        успевает раньше, чем фраза прозвучала бы."""
+        box = {}
+
+        def run():
+            try:
+                box["text"] = work()
+            except Exception:
+                log.exception("Задание упало")
+                box["text"] = "Не получилось, сэр"
+
+        th = threading.Thread(target=run, daemon=True, name="work")
+        th.start()
+        th.join(brain.agent_conf(self.cfg).get("thinking_delay", 1.5))
+        if th.is_alive() and phrase:
+            self.speak(phrase)
+        th.join()
+        return box.get("text")
 
     def touch(self):
         self.last_phrase_at = time.monotonic()
@@ -366,6 +419,7 @@ class Jarvis:
     def apply_performance(self):
         """Применить настройки производительности (вызывается и из панели)."""
         perf.apply(self.cfg)
+        self.listener.skip_silence = self.cfg.get("performance", {}).get("skip_silence", True)
         if not self.cfg.get("performance", {}).get("pause_in_fullscreen", False):
             if self.listener.suspended.is_set():
                 self.listener.suspended.clear()
@@ -403,8 +457,33 @@ class Jarvis:
             self.run_in_worker(lambda: phrase)
         return new
 
+    def open_mic(self):
+        """Открыть микрофон. Не открылся (выдернут, Windows не даёт доступ) —
+        сказать один раз и пробовать снова каждые 10 с. Раньше поток
+        распознавания тут молча умирал, и Джарвис висел глухим без следа в журнале."""
+        told = False
+        while True:
+            try:
+                self.listener.start()
+                if told:
+                    log.info("Микрофон открылся")
+                return
+            except Exception as exc:
+                log.error("Микрофон не открылся: %s", exc)
+                if not told:
+                    told = True
+                    self.run_in_worker(lambda: "Сэр, не могу открыть микрофон. Проверьте, что он "
+                                               "подключён и Windows разрешает к нему доступ")
+                time.sleep(10)
+
+    def listen(self):
+        try:
+            self.loop()
+        except Exception:
+            log.exception("Поток распознавания упал")
+
     def loop(self):
-        self.listener.start()
+        self.open_mic()
         skills.index_programs()
         self.set_state("idle")
         # только что обновились — сказать об этом (и отметить для update.py,
@@ -422,6 +501,8 @@ class Jarvis:
             # (звонки клиентам, пароли) на диск не попадают
             if woke or self.mode == "command" or self.cfg.get("log_all_speech"):
                 log.info("Услышал: %s", phrase)
+            elif self.cfg.get("log_near_miss", True):
+                self.log_near_miss(phrase)
 
             if self.mode == "idle":
                 if not woke:
@@ -538,7 +619,9 @@ class Jarvis:
         except Exception:
             log.exception("Панель не запустилась")
         updater.start(self)                 # новые версии с GitHub (если есть ключ)
-        threading.Thread(target=self.loop, daemon=True, name="listen").start()
+        runtime.start(self)                 # свой Python вместо системного
+        models.start(self)                  # слабый ПК — докачать маленькую модель
+        threading.Thread(target=self.listen, daemon=True, name="listen").start()
         threading.Thread(target=self.watchdog, daemon=True, name="watchdog").start()
         self.icon.run()
 

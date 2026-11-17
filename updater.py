@@ -248,9 +248,21 @@ def backup_version():
 
 
 def after_start():
-    """Вызывается, когда Джарвис поднялся. Если это свежая версия — сказать
-    update.py «всё хорошо» (иначе тот вернёт прежнюю). → что сказать вместо
-    приветствия или ""."""
+    """Вызывается, когда Джарвис поднялся. Если это свежая версия или свой
+    Python — сказать update.py «всё хорошо» (иначе тот вернёт прежнее).
+    → что сказать вместо приветствия или ""."""
+    import runtime
+
+    try:
+        rt = runtime.after_start()
+    except Exception:
+        log.exception("Проверка своего Python упала")
+        rt = ""
+    code = _after_start_code()
+    return " ".join(x for x in (code, rt) if x)
+
+
+def _after_start_code():
     st = _read_status()
     if st.get("status") == "starting" and st.get("to") == version.VERSION:
         st.update(status="ok", ok_at=_now())
@@ -291,11 +303,15 @@ def _quiet(app):
 
 
 def _launch(*args):
-    """Запустить update.py его копией из updates\\ — сам файл сейчас заменится."""
+    """Запустить update.py его копией из updates\\ — сам файл сейчас заменится.
+    Тем же Python, что и сейчас (venv или свой из runtime\\): его update.py не
+    трогает, даже когда переключает Джарвиса на другой."""
+    import runtime
+
     UPDATES.mkdir(exist_ok=True)
     runner = UPDATES / "_update.py"
     shutil.copy2(HOME / "update.py", runner)
-    python = HOME / "venv" / "Scripts" / "pythonw.exe"
+    python = runtime.pythonw()
     subprocess.Popen([str(python), str(runner), *args, "--root", str(HOME),
                       "--pid", str(os.getpid())],
                      cwd=str(UPDATES), creationflags=CREATE_NO_WINDOW)
@@ -314,7 +330,20 @@ def _quit(app):
     os._exit(0)
 
 
-def install(path, new_version):
+def runtime_for(path):
+    """Новой версии нужен другой свой Python? Подготовить его заранее (скачать,
+    проверить). → (имя или "", ошибка или ""). Пока Джарвис работает из venv —
+    библиотеки ставит pip, а свой Python подтянет runtime.start."""
+    import runtime
+
+    need, now = runtime.wanted_in(path), runtime.running()
+    if not need or not now or need == now:
+        return "", ""
+    log.info("Версии нужен свой Python %s (сейчас %s)", need, now)
+    return need, runtime.prepare(need) or runtime.mic_problem(need)
+
+
+def install(path, new_version, rt=""):
     """Поставить скачанную версию: запустить update.py и выйти.
     Вызывать из рабочего потока — там поднят COM для голоса."""
     with _lock:
@@ -324,7 +353,7 @@ def install(path, new_version):
     log.info("Ставлю версию %s (сейчас %s)", new_version, version.VERSION)
     try:
         _app.speak(f"Сэр, обновляюсь до версии {spoken(new_version)}. Вернусь через минуту")
-        _launch(str(path))
+        _launch(str(path), *(("--runtime", rt) if rt else ()))
     except Exception:
         with _lock:
             STATE["installing"] = False
@@ -346,7 +375,10 @@ def update_now():
         path = download(info)
     except UpdateError as exc:
         return f"Не смог скачать обновление: {exc}"
-    install(path, info["version"])
+    rt, problem = runtime_for(path)
+    if problem:
+        return f"Не смог подготовить Python для новой версии: {problem}"
+    install(path, info["version"], rt)
     return None
 
 
@@ -406,6 +438,12 @@ def _cycle():
             STATE["error"] = f"не скачалось: {exc}"
         log.warning("Обновление %s не скачалось: %s", info["version"], exc)
         return
+    rt, problem = runtime_for(path)
+    if problem:
+        with _lock:
+            STATE["error"] = f"Python для версии {info['version']}: {problem}"
+        log.warning("Python для версии %s: %s", info["version"], problem)
+        return
     # на паузе не трогаем: после перезапуска пауза снялась бы сама
     while not _quiet(_app) or _app.paused.is_set():
         time.sleep(30)
@@ -418,7 +456,7 @@ def _cycle():
             _app.run_in_worker(lambda: f"Сэр, вышла новая версия {spoken(info['version'])}. "
                                        "Скажите «обновись», когда будет удобно")
         return
-    _app.run_in_worker(lambda: install(path, info["version"]))
+    _app.run_in_worker(lambda: install(path, info["version"], rt))
 
 
 def status(cfg):

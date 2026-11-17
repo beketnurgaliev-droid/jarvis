@@ -1,5 +1,8 @@
-# окружение и модель — ставятся install.ps1, в репозиторий не кладём
+# окружение и модель — ставятся install.ps1, в репозиторий не кладём;
+# свой Python (runtime) собирает package.py --runtime и выпускает отдельным релизом
 venv/
+runtime/
+build/
 vosk-model-*/
 *.zip
 

@@ -20,9 +20,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 import browser
+import dictation
 import games
 import info
+import look
 import memory
+import pcstatus
 import reminders
 import version
 import windows
@@ -32,12 +35,15 @@ log = logging.getLogger("jarvis.skills")
 
 
 class Result:
-    """Что Джарвис ответит и, если надо, что спросит перед опасным действием."""
+    """Что Джарвис ответит и, если надо, что спросит перед опасным действием.
+    work — долгая работа (снимок экрана + ИИ, диктовка): её ответ и есть ответ
+    Джарвиса, а say тогда — «секунду», если работа задумалась."""
 
-    def __init__(self, say=None, ask=None, action=None):
+    def __init__(self, say=None, ask=None, action=None, work=None):
         self.say = say
         self.ask = ask
         self.action = action
+        self.work = work
 
 
 # --------------------------------------------------------------------------
@@ -618,6 +624,38 @@ async def _playing_now():
     return any(s.get_playback_info().playback_status == 4 for s in mgr.get_sessions())
 
 
+async def _now_playing():
+    """(название, исполнитель, играет ли) — что играет сейчас (или стоит на
+    паузе) в любом плеере: ютуб в браузере, Спотифай, Яндекс Музыка… Нет — None."""
+    from winsdk.windows.media.control import (
+        GlobalSystemMediaTransportControlsSessionManager as Manager)
+
+    mgr = await Manager.request_async()
+    sessions = list(mgr.get_sessions())
+    if not sessions:
+        return None
+    sessions.sort(key=lambda s: s.get_playback_info().playback_status != 4)
+    session = sessions[0]
+    props = await session.try_get_media_properties_async()
+    return (props.title or "", props.artist or "",
+            session.get_playback_info().playback_status == 4)
+
+
+def now_playing():
+    """«Что за песня играет?» — ответ вслух."""
+    found = _run_winrt(_now_playing, timeout=3)
+    if not found or not found[0]:
+        return "Сейчас ничего не играет, сэр"
+    title, artist, playing = found
+    title = _short_title(title)
+    # у ютуба исполнитель — это канал: «Linkin Park - Topic», «ArtistVEVO»
+    artist = re.sub(r"\s*-\s*topic$|vevo$|\s*official$", "", artist.strip(), flags=re.I).strip()
+    if artist and artist.lower() in title.lower():
+        artist = ""                     # «Linkin Park - In The End» уже с исполнителем
+    head = "Играет" if playing else "На паузе"
+    return f"{head}: {title}" + (f", исполняет {artist}" if artist else "")
+
+
 def _run_winrt(coro_fn, *args, timeout=6.0):
     """WinRT — в отдельном потоке: в рабочем потоке Джарвиса COM уже поднят
     как STA (для pycaw и голоса). Упало или зависло — None."""
@@ -882,6 +920,11 @@ _PREV = re.compile(
     rf"^(?:(?:включи|поставь|давай|верни)\s+)?(?:предыдущ\w*|прошл\w*)"
     rf"(?:\s+{_SONG})?{_ON_YT}$"
     rf"|^(?:назад|верни)(?:\s+{_SONG})?{_ON_YT}$")
+_NOW_PLAYING = re.compile(
+    r"^(?:а\s+)?(?:что|какая|какой|чья|кто)\s+(?:это\s+|сейчас\s+|щас\s+|тут\s+)*(?:за\s+)?"
+    r"(?:песня|песню|трек|музыка|играет|поет|исполняет|поют)"
+    r"(?:\s+(?:играет|сейчас|щас|это|поет|тут|на\s+ютубе))*$"
+    r"|^как\s+называется\s+(?:эта\s+|этот\s+)?(?:песня|трек)(?:\s+(?:играет|сейчас|щас))*$")
 
 
 # --------------------------------------------------------------------------
@@ -1010,6 +1053,12 @@ _HINT_COMMANDS = (
     "какая у тебя версия", "проверь обновления", "обновись (поставить новую версию Джарвиса)",
     "сделай скриншот", "какие у меня игры", "заблокируй компьютер",
     "выключи компьютер", "перезагрузи компьютер",
+    "что за песня играет", "как там комп (процессор, память, диски, видеокарта)",
+    "что грузит комп", "сколько места на диске", "сколько свободной памяти",
+    "что на экране / что за ошибка на экране (смотрит снимок окна)",
+    "переведи выделенное (на <язык>)", "прочитай выделенное", "объясни выделенное",
+    "перескажи выделенное", "переведи что на экране", "переведи из буфера",
+    "напиши <текст> (печатает текст в активное окно)",
 )
 
 
@@ -1158,6 +1207,8 @@ def _handle(t, cfg, soft=False):
         return Result(say=media_skip("next"))
     if _PREV.match(t):
         return Result(say=media_skip("prev"))
+    if _NOW_PLAYING.match(t):
+        return Result(say=now_playing())
 
     # --- браузер: открыть сайт, поиск, вкладка (явные триггеры) ---
     result = _browser_command(t)
@@ -1174,6 +1225,16 @@ def _handle(t, cfg, soft=False):
         say = module.handle(t, cfg)
         if say:
             return Result(say=say)
+
+    # --- «как там комп»: процессор, память, диски, видеокарта ---
+    say = pcstatus.handle(t)
+    if say:
+        return Result(say=say)
+
+    # --- диктовка: «напиши …» печатает в активное окно ---
+    spoken = dictation.match(t)
+    if spoken:
+        return Result(say="Печатаю", work=lambda: dictation.run(spoken, cfg))
 
     # --- память о пользователе ---
     m = re.match(r"^(?:запомни|запиши в память)\s+(?:что\s+|себе\s+)?(.+)$", t)
@@ -1298,7 +1359,7 @@ def _handle(t, cfg, soft=False):
         return Result(say=f"Версия {version.spoken()} от {day.day} {_MONTHS[day.month - 1]}")
 
     # --- скриншот ---
-    if re.match(r"^(скриншот|сделай скриншот|снимок экрана|сфотографируй экран)$", t):
+    if re.match(r"^(?:сделай\s+)?(?:скриншот|снимок экрана|сфотографируй экран)(?:\s+экрана)?$", t):
         path = screenshot()
         return Result(say="Скриншот в папке Изображения, Jarvis")
 
@@ -1311,5 +1372,12 @@ def _handle(t, cfg, soft=False):
     if re.match(r"^(перезагрузи( компьютер)?|перезагрузка)$", t):
         return Result(ask="Перезагрузить компьютер, сэр? Скажи «да» для подтверждения",
                       action=lambda: subprocess.Popen(["shutdown", "/r", "/t", "5"]))
+
+    # --- что на экране, выделенное (последним: «что это», «объясни» — общие слова) ---
+    found = look.parse(t)
+    if found:
+        source, task, lang = found
+        return Result(say="Секунду, смотрю",
+                      work=lambda: look.run(source, task, lang, t, cfg))
 
     return None

@@ -38,15 +38,16 @@ def _thinking(value):
     return {"thinkingLevel": str(value)}
 
 
-def ask(prompt, system, conf, key):
+def ask(prompt, system, conf, key, image=None):
     """Короткий ответ. Вернуть (текст, None) или (None, причина).
+    image — {"mime", "b64"} (ai.image): снимок экрана и т.п.
 
     Бесплатный Gemini то отвечает за секунду, то зависает на десять. Поэтому
     спрашиваем основную и запасную модели сразу и берём первый ответ."""
     names = [conf.get("model") or DEFAULT_MODEL]
     names += [m for m in conf.get("backup_models", BACKUP_MODELS) if m not in names]
     pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="gemini")
-    futures = [pool.submit(_ask_one, name, key, prompt, system, conf) for name in names]
+    futures = [pool.submit(_ask_one, name, key, prompt, system, conf, image) for name in names]
     errors = []
     try:
         for fut in as_completed(futures, timeout=conf.get("timeout", 20)):
@@ -61,9 +62,12 @@ def ask(prompt, system, conf, key):
     return None, errors[0] if errors else "нет ответа"
 
 
-def _ask_one(model, key, prompt, system, conf):
+def _ask_one(model, key, prompt, system, conf, image=None):
     """Спросить одну модель. Вернуть (текст, None) или (None, причина)."""
-    base = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+    parts = [{"text": prompt}]
+    if image:
+        parts.append({"inlineData": {"mimeType": image["mime"], "data": image["b64"]}})
+    base = {"contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"maxOutputTokens": conf.get("max_tokens", 400)}}
     if system:
         base["systemInstruction"] = {"parts": [{"text": system}]}

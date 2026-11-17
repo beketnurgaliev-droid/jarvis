@@ -6,12 +6,18 @@
 
     pythonw _update.py АРХИВ --root ПАПКА --pid PID         — поставить версию
     pythonw _update.py --rollback --root ПАПКА --pid PID    — вернуть прежнюю
+    pythonw _update.py --runtime ИМЯ --root ПАПКА --pid PID — перейти на свой Python
+    pythonw _update.py АРХИВ --runtime ИМЯ …                — и то и другое разом
 
 Порядок: дождаться выхода Джарвиса → прежние файлы в backup\\ → распаковать
 новые (личное не трогаем) → библиотеки, если поменялся requirements.txt →
 запустить → ждать, пока новая версия отзовётся в updates\\installed.json.
 Не отозвалась — вернуть прежние файлы и запустить снова. Что бы ни случилось,
 в конце Джарвис запущен.
+
+Свой Python (runtime\\ИМЯ, см. runtime.py) включается строкой в
+runtime\\current.txt — её читает start-jarvis.vbs. Не отозвался — прежняя
+строка (или никакой: тогда снова venv).
 
 Код Джарвиса отсюда не импортируем: работает старая копия этого файла с
 новой версией на диске. По той же причине — запреты, а не список разрешённого:
@@ -37,8 +43,8 @@ OK_TIMEOUT = 180            # сек: столько ждём, что новая
 PRIVATE = {"gemini.key", "keys.dat", "update.key", "config.json", "config.json.bak",
            "learned.json", "games.json", "jarvis.log", "panel.url", "memory.json",
            "reminders.json"}
-# папки, куда архив не пишет: окружение, модели, журналы, сами обновления
-KEEP_DIRS = {"venv", "logs", "updates", "backup", "versions", "agent-home"}
+# папки, куда архив не пишет: окружение, свой Python, модели, журналы, сами обновления
+KEEP_DIRS = {"venv", "runtime", "build", "logs", "updates", "backup", "versions", "agent-home"}
 
 log = logging.getLogger("update")
 
@@ -122,13 +128,15 @@ def start_jarvis(root):
                      creationflags=CREATE_NO_WINDOW)
 
 
-def wait_ok(root, new):
+def wait_ok(root, new, read=None):
     """Новая версия отозвалась? Ждём OK_TIMEOUT; если Джарвиса нет в процессах
-    дольше 40 с подряд — он упал, ждать дальше незачем."""
+    дольше 40 с подряд — он упал, ждать дальше незачем. read — чей отзыв ждать
+    (по умолчанию updates\\installed.json)."""
+    read = read or read_status
     started = time.monotonic()
     gone_since = None
     while time.monotonic() - started < OK_TIMEOUT:
-        st = read_status(root)
+        st = read(root)
         if st.get("status") == "ok" and st.get("to") == new:
             return True
         try:
@@ -143,8 +151,70 @@ def wait_ok(root, new):
             log.error("Новая версия закрылась, не отозвавшись")
             return False
         time.sleep(2)
-    st = read_status(root)
+    st = read(root)
     return st.get("status") == "ok" and st.get("to") == new
+
+
+# --------------------------------------------------------------------------
+# Свой Python (runtime\ИМЯ, строка в runtime\current.txt)
+# --------------------------------------------------------------------------
+
+def get_runtime(root):
+    try:
+        return (root / "runtime" / "current.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def set_runtime(root, name):
+    """name="" — свой Python выключить: start-jarvis.vbs возьмёт venv."""
+    pointer = root / "runtime" / "current.txt"
+    if name:
+        pointer.parent.mkdir(exist_ok=True)
+        pointer.write_text(name, encoding="utf-8")
+    else:
+        pointer.unlink(missing_ok=True)
+    log.info("Python для запуска: %s", name or "venv")
+
+
+def on_runtime(root):
+    name = get_runtime(root)
+    return bool(name) and (root / "runtime" / name / "pythonw.exe").is_file()
+
+
+def read_rt_status(root):
+    try:
+        return json.loads((root / "updates" / "runtime.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def write_rt_status(root, data):
+    path = root / "updates" / "runtime.json"
+    path.parent.mkdir(exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def switch_runtime(root, name):
+    """Перейти на свой Python name; не отозвался — вернуть прежний."""
+    prev = get_runtime(root)
+    if not (root / "runtime" / name / "pythonw.exe").is_file():
+        log.error("Нет runtime\\%s — переключать некуда", name)
+        start_jarvis(root)
+        return
+    write_rt_status(root, {"status": "starting", "from": prev, "to": name, "time": _now()})
+    set_runtime(root, name)
+    start_jarvis(root)
+    if wait_ok(root, name, read_rt_status):
+        log.info("Джарвис запустился на своём Python %s", name)
+        return
+    log.error("На своём Python %s Джарвис не отозвался — возвращаю %s", name, prev or "venv")
+    stop_jarvis(root)
+    set_runtime(root, prev)
+    write_rt_status(root, {"status": "rolled_back", "from": prev, "to": name, "time": _now()})
+    start_jarvis(root)
 
 
 # --------------------------------------------------------------------------
@@ -253,24 +323,31 @@ def restore(root):
 
 # --------------------------------------------------------------------------
 
-def install(root, zpath):
+def install(root, zpath, rt=""):
+    """rt — заодно перейти на свой Python rt (новой версии нужны другие библиотеки)."""
     old = read_version(root)
+    old_rt = get_runtime(root)
     with zipfile.ZipFile(zpath) as z:
         files = members(z)
         new_req = z.read("Jarvis/requirements.txt") if "requirements.txt" in files else None
         m = re.search(r'CHANGES\s*=\s*\[\s*\(\s*"([^"]+)"', z.read("Jarvis/version.py").decode("utf-8"))
     new = m.group(1) if m else "?"
-    log.info("Обновление %s → %s", old, new)
+    log.info("Обновление %s → %s%s", old, new, f" (Python {rt})" if rt else "")
     req = root / "requirements.txt"
     req_changed = new_req is not None and (not req.exists() or req.read_bytes() != new_req)
     backup(root, files, old)
     write_status(root, {"status": "installing", "from": old, "to": new, "time": _now()})
     try:
         unpack(root, zpath, files)
-        if req_changed:
+        if rt:
+            set_runtime(root, rt)           # библиотеки приехали вместе с ним
+        elif req_changed and on_runtime(root):
+            log.warning("Поменялись библиотеки, а нового своего Python нет — ставлю как есть")
+        elif req_changed:
             pip_install(root)
     except Exception:
         log.exception("Установка %s не удалась", new)
+        set_runtime(root, old_rt)
         rollback(root, new, "error")
         return
     write_status(root, {"status": "starting", "from": old, "to": new, "time": _now()})
@@ -284,6 +361,8 @@ def install(root, zpath):
         return
     log.error("Версия %s не отозвалась — возвращаю %s", new, old)
     stop_jarvis(root)
+    if rt:
+        set_runtime(root, old_rt)
     rollback(root, new, "no_start")
 
 
@@ -302,6 +381,7 @@ def main():
     ap.add_argument("--root", required=True)
     ap.add_argument("--pid", type=int, default=0)
     ap.add_argument("--rollback", action="store_true")
+    ap.add_argument("--runtime", default="")
     args = ap.parse_args()
     root = Path(args.root).resolve()
 
@@ -314,8 +394,12 @@ def main():
         wait_exit(root, args.pid)
         if args.rollback:
             rollback(root, read_version(root), "user")
+        elif args.zip:
+            install(root, Path(args.zip), args.runtime)
+        elif args.runtime:
+            switch_runtime(root, args.runtime)
         else:
-            install(root, Path(args.zip))
+            start_jarvis(root)
     except Exception:
         log.exception("Обновление упало")
         # что бы ни случилось — Джарвис должен работать

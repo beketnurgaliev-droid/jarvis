@@ -194,11 +194,23 @@ def status(p):
 # Спросить
 # --------------------------------------------------------------------------
 
-def ask(p, prompt, system, actions=False):
-    """Вернуть (текст, None) или (None, причина)."""
+def image(data, mime="image/jpeg"):
+    """Картинка для ask(): снимок экрана и т.п."""
+    import base64
+    return {"mime": mime, "data": data, "b64": base64.b64encode(data).decode("ascii")}
+
+
+def sees_images(p):
+    """Может ли этот ИИ смотреть картинки. OpenAI-совместимые — смотря какая
+    модель; пробуем, не вышло — следующий по списку."""
+    return p.get("type") in ("gemini", "openai", "anthropic", "claude_code")
+
+
+def ask(p, prompt, system, actions=False, image=None):
+    """Вернуть (текст, None) или (None, причина). image — из image()."""
     started = time.monotonic()
     try:
-        text, err = _ASK[p["type"]](p, prompt, system, actions)
+        text, err = _ASK[p["type"]](p, prompt, system, actions, image)
     except Exception as exc:
         log.exception("%s упал", p.get("name"))
         return None, f"ошибка: {exc}"
@@ -207,8 +219,8 @@ def ask(p, prompt, system, actions=False):
     return text, err
 
 
-def _ask_gemini(p, prompt, system, _actions):
-    return gemini.ask(prompt, system, p, keys.get(p["id"]))
+def _ask_gemini(p, prompt, system, _actions, image=None):
+    return gemini.ask(prompt, system, p, keys.get(p["id"]), image)
 
 
 def _post_json(url, body, headers, timeout):
@@ -239,10 +251,15 @@ def _openai_headers(p):
     return headers
 
 
-def _ask_openai(p, prompt, system, _actions):
+def _ask_openai(p, prompt, system, _actions, image=None):
     base = (p.get("base_url") or "").rstrip("/")
+    content = prompt
+    if image:
+        content = [{"type": "text", "text": prompt},
+                   {"type": "image_url",
+                    "image_url": {"url": f"data:{image['mime']};base64,{image['b64']}"}}]
     messages = ([{"role": "system", "content": system}] if system else []) + \
-        [{"role": "user", "content": prompt}]
+        [{"role": "user", "content": content}]
     # у новых моделей OpenAI свои имена параметров — пробуем по очереди
     attempts = [
         {"model": p.get("model"), "messages": messages, "max_tokens": p.get("max_tokens", 400),
@@ -280,14 +297,19 @@ _CLAUDE_NEW_SEARCH = ("claude-opus-5", "claude-sonnet-5", "claude-opus-4-8", "cl
                       "claude-opus-4-6", "claude-sonnet-4-6")
 
 
-def _ask_anthropic(p, prompt, system, _actions):
+def _ask_anthropic(p, prompt, system, _actions, image=None):
     import anthropic
 
     model = p.get("model") or "claude-opus-5-5"
     client = anthropic.Anthropic(api_key=keys.get(p["id"]), timeout=p.get("timeout", 30),
                                  max_retries=1)
+    content = prompt
+    if image:
+        content = [{"type": "image", "source": {"type": "base64", "media_type": image["mime"],
+                                                "data": image["b64"]}},
+                   {"type": "text", "text": prompt}]
     kwargs = {"model": model, "max_tokens": 2048, "system": system,
-              "messages": [{"role": "user", "content": prompt}]}
+              "messages": [{"role": "user", "content": content}]}
     if model.startswith(_CLAUDE_EFFORT):
         kwargs["output_config"] = {"effort": "low"}     # голосу хватает короткого ответа
     if p.get("search"):
@@ -320,10 +342,22 @@ def _ask_anthropic(p, prompt, system, _actions):
     return (text, None) if text else (None, "пустой ответ")
 
 
-def _ask_claude_code(p, prompt, system, actions):
+def _ask_claude_code(p, prompt, system, actions, image=None):
     exe = find_claude(p.get("exe", ""))
     if not exe:
         return None, "Claude Code не установлен"
+    if image:
+        # программе картинку не передать — кладём файлом в её пустую папку,
+        # смотрит она его сама (Read умеет картинки) и сразу удаляем
+        AGENT_HOME.mkdir(exist_ok=True)
+        shot = AGENT_HOME / ("screen.png" if image["mime"] == "image/png" else "screen.jpg")
+        shot.write_bytes(image["data"])
+        prompt += (f"\n\nКартинка — файл {shot.name} в текущей папке: открой её "
+                   "инструментом Read и отвечай по ней.")
+        try:
+            return _ask_claude_code(dict(p, readonly_tools="Read"), prompt, system, False)
+        finally:
+            shot.unlink(missing_ok=True)
     tools = p.get("action_tools" if actions else "readonly_tools",
                   "Read Glob Grep WebSearch WebFetch")
     cmd = [exe, "-p", prompt, "--output-format", "text",
@@ -363,7 +397,9 @@ def _flat(text):
     return re.sub(r'["%^\r\n]+', " ", text).strip()
 
 
-def _ask_cli(p, prompt, system, _actions):
+def _ask_cli(p, prompt, system, _actions, image=None):
+    if image:
+        return None, "не умеет смотреть картинки"
     exe = _cli_exe(p)
     if not exe:
         return None, "программа не установлена"

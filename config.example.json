@@ -31,7 +31,8 @@
   "log_all_speech": false,
   "performance": {
     "low_priority": true,
-    "pause_in_fullscreen": false
+    "pause_in_fullscreen": false,
+    "skip_silence": true
   },
   "game_mode": {
     "close": {
