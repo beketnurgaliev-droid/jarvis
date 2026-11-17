@@ -1,6 +1,8 @@
 import asyncio, audioop, gc, io, json, sys, time, wave
+import os
 import psutil
-sys.path.insert(0, r"C:\Users\beket\projects\jarvis")
+HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # папка Джарвиса
+sys.path.insert(0, HOME)
 from speech import _OneCore
 from vosk import Model, KaldiRecognizer, SetLogLevel
 
@@ -22,7 +24,7 @@ proc = psutil.Process()
 for path in ["vosk-model-small-ru-0.22", "vosk-model-ru-0.42"]:
     m0 = proc.memory_info().rss
     t = time.time()
-    model = Model(r"C:\Users\beket\projects\jarvis\\" + path)
+    model = Model(os.path.join(HOME, path))
     load = time.time() - t
     ok, t = 0, time.time()
     for p, data in zip(phrases, pcm):

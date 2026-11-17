@@ -1,5 +1,5 @@
 import json, os, re, sys, time
-os.chdir(r"C:\Users\beket\projects\jarvis")
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # папка Джарвиса
 sys.path.insert(0, os.getcwd())
 import brain, games, skills, windows
 
