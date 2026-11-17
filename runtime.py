@@ -207,9 +207,7 @@ def fetch(name=WANTED):
     import keys
     import updater
 
-    token = keys.get(updater.KEY_NAME)
-    if not token:
-        return "нет ключа доступа"
+    token = keys.get(updater.KEY_NAME)      # репозиторий открытый — ключ не обязателен
     try:
         with updater._get(f"https://api.github.com/repos/{updater.REPO}/releases/tags/{tag(name)}",
                           token) as r:
@@ -253,8 +251,8 @@ def prepare(name=WANTED):
 
 
 def start(app):
-    """Фоном: перейти на свой Python WANTED. Если его нет — скачать (нужен
-    ключ обновлений, как у друга). Переключаем в тихий момент."""
+    """Фоном: перейти на свой Python WANTED. Если его нет — скачать с GitHub
+    (как обновления; в папке автора не скачиваем). Переключаем в тихий момент."""
     import updater
 
     def loop():
@@ -264,7 +262,7 @@ def start(app):
                 log.info("Свой Python %s уже не прижился — остаюсь как есть", WANTED)
                 return
             if not _valid(WANTED) and not (ROOT / WANTED).is_dir() and not updater.enabled():
-                return                                # ни собранного, ни ключа — нечего делать
+                return                                # ни собранного, ни обновлений — нечего делать
             STATE.update(downloading=True, error="")
             problem = prepare(WANTED) or mic_problem(WANTED)
             STATE["downloading"] = False

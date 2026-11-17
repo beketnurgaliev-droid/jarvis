@@ -736,14 +736,6 @@ def api_autostart(_p, body):
     return {"ok": True, "autostart": STARTUP_LNK.exists()}
 
 
-def api_package(_p, _body):
-    import package
-
-    path = package.build()
-    subprocess.Popen(["explorer", "/select,", str(path)])
-    return {"ok": True, "path": str(path)}
-
-
 def api_open(_p, body):
     what = body.get("what")
     target = {"folder": HOME, "log": LOG_FILE, "extension": HOME / "chrome-extension"}.get(what)
@@ -788,7 +780,6 @@ POST_ROUTES = {
     "/api/update/install": api_update_install,
     "/api/update/rollback": api_update_rollback,
     "/api/update/settings": api_update_settings,
-    "/api/package": api_package,
     "/api/open": api_open,
     "/api/space/free": api_space_free,
 }

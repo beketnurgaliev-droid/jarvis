@@ -192,7 +192,6 @@ h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; colo
     <button data-s="memory"><span class="ico">✎</span>Память</button>
     <button data-s="learned"><span class="ico">≈</span>Ослышки</button>
     <button data-s="log"><span class="ico">☰</span>Журнал</button>
-    <button data-s="share"><span class="ico">⇪</span>Поделиться</button>
   </nav>
   <div class="foot"><div id="ver"></div><div id="folder"></div></div>
 </aside>
@@ -218,7 +217,7 @@ h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; colo
     <p class="hint" id="upd-text" style="margin:0 0 10px"></p>
     <ul id="upd-notes" hidden></ul>
     <div class="row" id="upd-auto-row"><span class="lbl">Обновляться самому</span><div class="ctl"><label class="switch"><input type="checkbox" id="upd-auto"><span></span></label><span class="hint" style="margin:0">ставит новую версию, когда с ним не говорят и нет игры на весь экран</span></div></div>
-    <form class="row" onsubmit="return false"><label for="upd-key">Ключ доступа к обновлениям</label><div class="ctl"><input type="password" id="upd-key" class="grow" autocomplete="off" placeholder="github_pat_…"><button type="button" class="btn" id="upd-key-save">Сохранить</button></div></form>
+    <form class="row" id="upd-key-row" onsubmit="return false" hidden><label for="upd-key">Ключ доступа к обновлениям</label><div class="ctl"><input type="password" id="upd-key" class="grow" autocomplete="off" placeholder="github_pat_…"><button type="button" class="btn" id="upd-key-save">Сохранить</button></div></form>
     <div class="actions">
       <button class="btn" id="upd-check">Проверить сейчас</button>
       <button class="btn primary" id="upd-install" hidden>Обновить сейчас</button>
@@ -251,6 +250,10 @@ h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; colo
       <div><b>рабочий режим</b> — свои режимы во вкладке «Режимы»</div>
       <div><b>открой панель</b> · отбой</div>
       <div><b>какая у тебя версия</b> · проверь обновления · обновись</div>
+      <div><b>что на экране</b> · что за ошибка</div>
+      <div><b>переведи выделенное</b> · объясни это</div>
+      <div><b>как там комп</b> · что за песня играет</div>
+      <div><b>напиши привет как дела</b> — печатает в окно</div>
     </div>
   </div>
   <div class="card">
@@ -382,27 +385,6 @@ h3.grp { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; colo
       <button data-f="brain">Ответы ИИ</button><button data-f="error">Ошибки</button>
     </div>
     <div class="log" id="log"></div>
-  </div>
-</section>
-
-<section id="s-share">
-  <h1>Поделиться</h1>
-  <p class="sub">Архив Джарвиса для друга — без ваших личных данных.</p>
-  <div class="card">
-    <div class="two">
-      <div><h2>Попадёт в архив</h2><ul><li>программа Джарвиса и панель</li><li>расширение для ютуба</li><li>установщик</li></ul></div>
-      <div><h2>Не попадёт</h2><ul><li>ваш ключ Gemini</li><li>ваши настройки и программы</li><li>журнал и ослышки</li><li>Python и модели — установщик скачает сам</li></ul></div>
-    </div>
-    <div class="actions"><button class="btn primary" id="pack">Собрать архив</button><span id="pack-out" class="hint" style="margin:6px 0 0"></span></div>
-  </div>
-  <div class="card">
-    <h2>Что сделать другу</h2>
-    <ol class="steps">
-      <li>Распаковать архив в <code>C:\Jarvis</code> — без русских букв в пути, иначе не загрузится распознавание.</li>
-      <li>Запустить <b>Установить.bat</b>: поставит Python, библиотеки и модель распознавания (большая — 1,8 ГБ, слышит лучше).</li>
-      <li>Получить свой бесплатный ключ на <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> и вставить, когда установщик спросит. Или позже — в панели, во вкладке «ИИ».</li>
-      <li>По желанию — расширение для ютуба: в Chrome <code>chrome://extensions</code> → «Режим разработчика» → «Загрузить распакованное» → папка <code>chrome-extension</code>.</li>
-    </ol>
   </div>
 </section>
 
@@ -542,9 +524,10 @@ $("#b-restart").onclick = (e) => run(e.target, async () => { await restart(); })
 function renderUpdate() {
   const u = S.update;
   let cls = "ok", label = "последняя версия", text;
-  if (!u.has_key) {
+  if (!u.enabled) {
     cls = "mute"; label = "выключены";
-    text = "Нет ключа доступа — новые версии не проверяются. Ключ присылает тот, кто дал вам Джарвиса.";
+    text = u.dev ? "Это папка разработчика (здесь git): версии выпускаются отсюда, сама она не обновляется."
+                 : "Обновления не настроены.";
   } else if (u.installing) {
     cls = "warn"; label = "ставится";
     text = "Джарвис обновляется и через минуту запустится сам.";
@@ -562,11 +545,13 @@ function renderUpdate() {
   $("#upd-text").textContent = text;
   $("#upd-notes").hidden = !u.notes.length;
   $("#upd-notes").innerHTML = u.notes.map((x) => `<li>${esc(x)}</li>`).join("");
-  $("#upd-auto-row").hidden = !u.has_key;
+  $("#upd-auto-row").hidden = !u.enabled;
   $("#upd-auto").checked = u.auto;
+  // репозиторий открытый — ключ не нужен; поле видно, только если обновления не работают
+  $("#upd-key-row").hidden = u.enabled || u.dev;
   $("#upd-key").value = "";
   $("#upd-key").placeholder = u.has_key ? "есть: " + u.key_hint + " — вставьте новый, чтобы заменить" : "github_pat_…";
-  $("#upd-check").hidden = !u.has_key;
+  $("#upd-check").hidden = !u.enabled;
   $("#upd-install").hidden = !u.available || u.installing;
   $("#upd-back").hidden = !u.backup;
   $("#upd-back").textContent = "Вернуть версию " + u.backup;
@@ -1192,13 +1177,6 @@ async function loadLog() {
     return head + `<div class="ln"><span class="t">${esc(l.time)}</span><span class="b">${pill(k[1], k[0])}</span><span class="m">${esc(l.text)}</span></div>`;
   }).join("") : `<div class="empty">Пусто</div>`;
 }
-
-// --- поделиться -------------------------------------------------------------
-$("#pack").onclick = (e) => run(e.target, async () => {
-  $("#pack-out").textContent = "собираю…";
-  const r = await api("/api/package", {});
-  $("#pack-out").innerHTML = "Готово: <code>" + esc(r.path) + "</code> — папка открыта, файл выделен";
-});
 
 // --- старт ------------------------------------------------------------------
 if (!TOKEN) {

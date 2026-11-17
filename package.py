@@ -7,7 +7,9 @@
 установщик скачает и соберёт всё сам на месте.
 
     venv\\Scripts\\python.exe package.py            — архив на рабочий стол
-    venv\\Scripts\\python.exe package.py --release  — и выпустить: друг обновится сам
+    venv\\Scripts\\python.exe package.py --release  — и выпустить: друзья обновятся сами, а для
+                                                     новых в релизе Jarvis-setup.zip
+                                                     (постоянная ссылка — setup_url())
     venv\\Scripts\\python.exe package.py --friend   — архив для первой установки у
                                                      друга: со своим Python и ключом
     venv\\Scripts\\python.exe package.py --runtime  — собрать свой Python (runtime) и
@@ -226,16 +228,32 @@ def _runner():
     return gh, git, run
 
 
+# установочный архив в каждом релизе — под одним и тем же именем, поэтому
+# ссылка на него постоянная и всегда ведёт на последнюю версию
+SETUP_ASSET = "Jarvis-setup.zip"
+
+
+def setup_url():
+    import updater
+    return f"https://github.com/{updater.REPO}/releases/latest/download/{SETUP_ASSET}"
+
+
 def release(path):
-    """Код — в репозиторий, архив — релизом vX.Y. Джарвис у друга найдёт его
-    сам (updater.py). Тот же номер второй раз не выпустить — сначала новая
-    запись в version.py."""
+    """Код — в репозиторий, архив обновления — релизом vX.Y (Джарвис у друзей
+    найдёт его сам, updater.py), рядом — установочный Jarvis-setup.zip для
+    новых (свой Python внутри, ключей нет). Тот же номер второй раз не выпустить
+    — сначала новая запись в version.py."""
     import updater
 
     gh, git, run = _runner()
     tag = f"v{version.VERSION}"
     if run(gh, "release", "view", tag, "--repo", updater.REPO, check=False).returncode == 0:
         raise RuntimeError(f"версия {version.VERSION} уже выпущена — добавь новую в version.py")
+    # что нового — все версии после прошлого релиза (друг мог перескочить несколько)
+    prev = run(gh, "release", "view", "--repo", updater.REPO, "--json", "tagName",
+               "-q", ".tagName", check=False).stdout.strip().lstrip("vV")
+    notes = "\n".join(f"- {item}" for ver, _day, items in version.CHANGES
+                      if not prev or updater.parse(ver) > updater.parse(prev) for item in items)
     run(git, "add", "-A")
     if run(git, "status", "--porcelain").stdout.strip():
         run(git, "commit", "-q", "-m", f"Версия {version.VERSION}")
@@ -246,10 +264,12 @@ def release(path):
     with tempfile.TemporaryDirectory() as tmp:
         asset = Path(tmp) / f"Jarvis-{version.VERSION}.zip"
         shutil.copy2(path, asset)
-        notes = "\n".join(f"- {item}" for item in version.CHANGES[0][2])
         run(gh, "release", "create", tag, str(asset), "--repo", updater.REPO,
             "--title", f"Джарвис {version.VERSION}", "--notes", notes, "--verify-tag")
-    return f"https://github.com/{updater.REPO}/releases/tag/{tag}"
+        # отдельной загрузкой и после: Джарвис 1.6 и старше берёт первый .zip релиза
+        setup = build(Path(tmp) / SETUP_ASSET, with_runtime=True)
+        run(gh, "release", "upload", tag, str(setup), "--repo", updater.REPO)
+    return f"https://github.com/{updater.REPO}/releases/tag/{tag}\nустановка: {setup_url()}"
 
 
 def friend():

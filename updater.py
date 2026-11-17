@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """Обновление Джарвиса с GitHub — само, в тихий момент.
 
-Версии лежат релизами в закрытом репозитории REPO: к релизу приложен тот же
-архив, что собирает package.py. Ключ на чтение — в keys.dat под именем
-"github" (другу он приезжает в архиве файлом update.key, keys.py переносит его
-в зашифрованное хранилище). Нет ключа — обновления выключены: так у автора,
-откуда версии и выпускаются, ничего само не меняется.
+Версии лежат релизами в открытом репозитории REPO: к релизу приложен тот же
+архив, что собирает package.py (и установочный Jarvis-setup.zip для новых —
+его обновление не берёт). Ключ не нужен; если он есть (keys.dat → "github",
+у первых друзей приехал файлом update.key, пока репозиторий был закрытым) —
+шлём его, так он продолжает работать и для закрытого.
+
+В папке автора (там git — код правят руками, оттуда версии и выпускаются)
+обновления выключены: ничего само не меняется.
 
 Порядок: проверка через пару минут после запуска и раз в CHECK_HOURS часов →
 нашлась версия новее — скачать в updates\\ и проверить архив → дождаться
@@ -70,8 +73,22 @@ def spoken(ver):
     return str(ver).replace(".", " точка ")
 
 
+def is_dev():
+    """Папка автора: здесь git. Сама себя из релизов не обновляет."""
+    return (HOME / ".git").exists()
+
+
 def enabled():
-    return bool(keys.get(KEY_NAME)) and not REPO.startswith("OWNER/")
+    return not REPO.startswith("OWNER/") and not is_dev()
+
+
+def _asset(rel, ver):
+    """Архив обновления из релиза: Jarvis-<версия>.zip; в старых релизах — первый
+    .zip. Установочный (setup) и свой Python (runtime) — не он."""
+    zips = [a for a in rel.get("assets", []) if str(a.get("name", "")).lower().endswith(".zip")]
+    exact = next((a for a in zips if a.get("name", "").lower() == f"jarvis-{ver}.zip".lower()), None)
+    return exact or next((a for a in zips if not re.search(r"setup|runtime", a.get("name", ""), re.I)),
+                         None)
 
 
 def auto(cfg):
@@ -97,14 +114,12 @@ class _NoAuthRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoAuthRedirect)
 
 
-def _get(url, token, accept="application/vnd.github+json", timeout=20):
-    req = urllib.request.Request(url, headers={
-        "Accept": accept,
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": f"Jarvis/{version.VERSION}",
-    })
-    return _opener.open(req, timeout=timeout)
+def _get(url, token=None, accept="application/vnd.github+json", timeout=20):
+    headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28",
+               "User-Agent": f"Jarvis/{version.VERSION}"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return _opener.open(urllib.request.Request(url, headers=headers), timeout=timeout)
 
 
 def _explain(exc):
@@ -114,7 +129,7 @@ def _explain(exc):
         if exc.code == 403:
             return "GitHub не пускает — права ключа или лимит запросов"
         if exc.code == 404:
-            return "версий не видно — у ключа нет доступа к репозиторию или релизов ещё нет"
+            return "версий не видно — релизов ещё нет или репозиторий закрыт"
         return f"GitHub ответил ошибкой {exc.code}"
     if isinstance(exc, (urllib.error.URLError, TimeoutError, OSError)):
         return "нет связи с GitHub"
@@ -133,19 +148,15 @@ def _now():
 def check():
     """Последний релиз новее нашей версии: {"version", "asset", "size"}; иначе None.
     Не получилось спросить — UpdateError."""
-    token = keys.get(KEY_NAME)
-    if not token:
-        raise UpdateError("нет ключа доступа")
     try:
-        with _get(f"https://api.github.com/repos/{REPO}/releases/latest", token) as r:
+        with _get(f"https://api.github.com/repos/{REPO}/releases/latest", keys.get(KEY_NAME)) as r:
             rel = json.load(r)
     except Exception as exc:
         raise UpdateError(_explain(exc)) from exc
     latest = str(rel.get("tag_name", "")).lstrip("vV")
     with _lock:
         STATE.update(checked=_now(), latest=latest, error="", notes=_notes(rel.get("body")))
-    asset = next((a for a in rel.get("assets", [])
-                  if str(a.get("name", "")).lower().endswith(".zip")), None)
+    asset = _asset(rel, latest)
     if asset is None or parse(latest) <= parse(version.VERSION):
         return None
     if latest == failed_version():
@@ -361,11 +372,17 @@ def install(path, new_version, rt=""):
     _quit(_app)
 
 
+def _disabled_phrase():
+    if is_dev():
+        return "Здесь обновления выключены: это папка разработчика, версии выпускаются отсюда"
+    return "Обновления не настроены"
+
+
 def update_now():
     """«Обновись» голосом или кнопкой: проверить, скачать и поставить сразу.
     Если ставить нечего — что сказать."""
     if not enabled():
-        return "Обновления не настроены: нет ключа доступа"
+        return _disabled_phrase()
     info, err = check_now()
     if err:
         return f"Не смог проверить обновления: {err}"
@@ -396,7 +413,7 @@ def rollback_now():
 def check_phrase(cfg):
     """«Проверь обновления» — ответ голосом."""
     if not enabled():
-        return "Обновления не настроены: нет ключа доступа"
+        return _disabled_phrase()
     info, err = check_now()
     if err:
         return f"Не смог проверить обновления: {err}"
@@ -467,7 +484,7 @@ def status(cfg):
     newer = bool(st["latest"]) and parse(st["latest"]) > parse(version.VERSION) \
         and st["latest"] != failed_version()
     return {
-        "enabled": enabled(), "has_key": bool(token), "key_hint": keys.hint(token),
+        "enabled": enabled(), "dev": is_dev(), "has_key": bool(token), "key_hint": keys.hint(token),
         "auto": auto(cfg), "current": version.VERSION, "latest": st["latest"],
         "available": st["latest"] if newer else "", "notes": st["notes"] if newer else [],
         "checked": st["checked"], "error": st["error"], "installing": st["installing"],
